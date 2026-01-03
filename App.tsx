@@ -31,7 +31,7 @@ const App: React.FC = () => {
       setAxioms(extracted);
     } catch (err) {
       console.error(err);
-      setError(lang === 'ar' ? "فشل التحليل." : "Synthesis failed.");
+      setError(lang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.");
     } finally {
       setIsSynthesizing(false);
     }
@@ -59,7 +59,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white ${lang === 'ar' ? 'rtl' : 'ltr'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {isSynthesizing && (
         <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center">
           <div className="spinner-arc mb-12 !border-t-[#a34a28]"></div>
@@ -84,7 +84,7 @@ const App: React.FC = () => {
         {pdf && (
           <button 
             onClick={() => setShowViewer(!showViewer)}
-            className={`p-2.5 rounded-xl transition-all border ${showViewer ? 'bg-[#a34a28] border-[#a34a28] text-white' : 'bg-white/5 border-white/5 text-white/40'}`}
+            className={`p-2.5 rounded-xl transition-all border ${showViewer ? 'bg-[#a34a28] border-[#a34a28] text-white shadow-none' : 'bg-white/5 border-white/5 text-white/40'}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
           </button>
@@ -94,8 +94,9 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-hidden relative z-10">
         {!pdf ? (
           <div className="h-full flex flex-col items-center justify-center p-6 text-center">
+            {/* إزالة التأثيرات الضوئية sanctuay-3d و text-glow */}
             <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase">{t.sanctuary}</h2>
-            <p className="mb-12 text-sm md:text-xl font-bold tracking-tight text-[#a34a28] max-w-2xl leading-relaxed">
+            <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-[#a34a28] max-w-2xl leading-tight">
               {t.introText}
             </p>
             <label className="w-full max-w-sm group relative block aspect-[1.3/1] border border-dashed border-white/10 rounded-[3rem] hover:border-[#a34a28]/40 transition-all cursor-pointer bg-white/[0.01]">
@@ -121,7 +122,7 @@ const App: React.FC = () => {
                       </div>
                     ))}
                  </div>
-                 <button onClick={() => setFlowStep('chat')} className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-2xl">
+                 <button onClick={() => setFlowStep('chat')} className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-none">
                    {t.deepChatBtn}
                  </button>
               </div>
