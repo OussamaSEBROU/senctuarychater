@@ -1,23 +1,20 @@
 
 import { GoogleGenAI, Type, Chat } from "@google/genai";
-import { Axiom, Message, Language } from "../types";
+import { Axiom, Language } from "../types";
 import { translations } from "../translations";
 
 let chatSession: Chat | null = null;
 let currentPdfBase64: string | null = null;
 
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher. Before answering any query about the uploaded PDF, you must:
-1. Analyze the author's philosophical/scientific school of thought.
-2. Determine the book's specific context (Historical, Technical, or Literary).
-3. Synthesize answers that align with the author's depth, maintaining a high cultural and intellectual tone.
+const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher. 
+Your tone is sophisticated, academic, and human-like (ChatGPT style).
 
-FORMATTING REQUIREMENTS (CRITICAL):
-- If the response is in Arabic, use RTL (Right-to-Left) alignment.
-- Use **bold text** for important definitions.
-- Use professional LaTeX for formulas (wrap in $ for inline or $$ for block).
-- ALWAYS respond in the language of the user's prompt (usually Arabic if they ask in Arabic).
-
-Your tone is sophisticated and academic.`;
+CRITICAL INSTRUCTIONS:
+1. You have been provided with a PDF document.
+2. Analyze the context deeply before answering.
+3. ALWAYS respond in Arabic when the user asks in Arabic, or English if asked in English.
+4. Use professional formatting: **bold** for key terms, and LaTeX for any mathematical formulas.
+5. Provide comprehensive, flowing answers as if you are writing a scholarly commentary.`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -30,11 +27,8 @@ const MODEL_NAME = "gemini-2.5-flash";
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   const ai = getGeminiClient();
   currentPdfBase64 = pdfBase64;
-  
-  // تصفير الجلسة السابقة عند رفع ملف جديد
-  chatSession = null;
+  chatSession = null; // Reset session for new file
 
-  // Use the correct format for contents with multiple parts as defined in @google/genai.
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
     contents: {
@@ -51,9 +45,6 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
         items: {
           type: Type.OBJECT,
           properties: {
-            recipeName: { // Note: The schema properties here should match the return type Axiom
-              type: Type.STRING,
-            },
             term: { type: Type.STRING },
             definition: { type: Type.STRING },
             significance: { type: Type.STRING }
@@ -79,29 +70,25 @@ export const chatWithManuscript = async (
   const ai = getGeminiClient();
 
   if (!chatSession) {
-    // إنشاء الجلسة لأول مرة مع الملف
     chatSession = ai.chats.create({
       model: MODEL_NAME,
       config: {
         systemInstruction: getSystemInstruction(lang),
-        temperature: 0.7,
+        temperature: 0.8,
       },
     });
 
-    // إرسال الملف في أول رسالة مخفية لتثبيت السياق
-    // Fix: chat.sendMessage 'message' parameter expects Part | Part[] | string. 
-    // It does not accept a Content object with a 'parts' property directly.
     if (currentPdfBase64) {
+      // First hidden prompt to establish the PDF context in the session
       await chatSession.sendMessage({
         message: [
           { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "Please analyze this document. I will now start asking questions about it." }
+          { text: "Document uploaded. Focus all subsequent answers on this text." }
         ]
       });
     }
   }
 
-  // إرسال سؤال المستخدم (بدون الملف، لأنه مخزن في الجلسة)
   const response = await chatSession.sendMessage({ message: userPrompt });
   return response.text || "No response generated.";
 };
