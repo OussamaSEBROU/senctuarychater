@@ -1,15 +1,4 @@
 
-import React, { useEffect, useState } from 'react';
-import { PDFData, Language } from '../types';
-
-interface ManuscriptViewerProps {
-  pdf: PDFData;
-  lang: Language;
-}
-
-const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf }) => {
-  const [blobUrl, setBlobUrl] = useState<string | null>(null);
-
 import React, { useEffect, useRef, useState } from 'react';
 import { PDFData, Language } from '../types';
 import { translations } from '../translations';
@@ -34,11 +23,10 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
       setLoading(true);
       setError(null);
       try {
-        // Dynamic import of PDF.js from ESM
+        // @ts-ignore - Importing from URL for high performance and no-install deployment
         const pdfjsLib = await import('https://esm.sh/pdfjs-dist@4.10.38');
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs`;
 
-        // Convert base64 to Uint8Array safely for large files
         const binaryString = atob(pdf.base64);
         const len = binaryString.length;
         const bytes = new Uint8Array(len);
@@ -60,7 +48,6 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
 
     loadPdf();
 
-    // Clean up
     return () => {
       if (pdfDocRef.current) {
         pdfDocRef.current.destroy();
@@ -70,7 +57,6 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
 
   return (
     <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none">
-      {/* Viewer Header - Archive Style */}
       <div className="h-12 bg-black/90 border-b border-white/10 flex items-center justify-between px-6 z-30 shadow-2xl shrink-0">
         <div className="flex items-center gap-4">
           <div className="flex items-center gap-2 opacity-60">
@@ -89,7 +75,6 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         </div>
       </div>
 
-      {/* Main Viewport with Horizontal Scroll */}
       <div 
         ref={containerRef} 
         className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center gap-6 md:gap-24 px-8 md:px-[20vw] scrollbar-none scroll-smooth relative"
@@ -117,7 +102,6 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         ))}
       </div>
 
-      {/* Footer Navigation */}
       {!loading && !error && (
         <div className="h-12 bg-black/95 border-t border-white/5 flex items-center justify-center px-6 gap-8 z-30 shrink-0">
            <div className="flex items-center gap-4">
@@ -162,7 +146,6 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(pageNum);
-        // High quality rendering scale
         const viewport = page.getViewport({ scale: window.devicePixelRatio || 1.5 });
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
@@ -190,7 +173,6 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
   return (
     <div className="relative group h-[70vh] md:h-[80vh] flex-shrink-0 snap-center flex items-center justify-center">
       <div className="relative h-full w-auto shadow-[0_40px_100px_rgba(0,0,0,0.9)] rounded-sm overflow-hidden bg-zinc-900 ring-1 ring-white/10 transition-transform duration-700 group-hover:scale-[1.01]">
-        {/* Placeholder before render */}
         {!isRendered && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
              <div className="w-8 h-8 border-2 border-white/5 border-t-white/20 rounded-full animate-spin"></div>
@@ -201,55 +183,12 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
           className={`h-full w-auto block object-contain transition-opacity duration-1000 ${isRendered ? 'opacity-100' : 'opacity-0'}`} 
           style={{ backgroundColor: '#fff' }}
         />
-        
-        {/* Page Overlay */}
         <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-5 py-2 rounded-full text-[9px] font-black text-white/40 opacity-0 group-hover:opacity-100 transition-all duration-300 uppercase tracking-[0.3em] border border-white/10 shadow-2xl pointer-events-none">
           Page {pageNum} <span className="mx-1 text-white/10">|</span> {pdfDoc?.numPages || '?'}
         </div>
       </div>
-      
-      {/* Decorative vertical lines for book feel */}
       <div className="absolute -left-12 inset-y-0 w-px bg-gradient-to-b from-transparent via-white/5 to-transparent hidden md:block"></div>
       <div className="absolute -right-12 inset-y-0 w-px bg-gradient-to-b from-transparent via-white/5 to-transparent hidden md:block"></div>
-    </div>
-  );
-};
-
-export default ManuscriptViewer;
-
-  useEffect(() => {
-    try {
-      const binaryString = window.atob(pdf.base64);
-      const bytes = new Uint8Array(binaryString.length);
-      for (let i = 0; i < binaryString.length; i++) {
-        bytes[i] = binaryString.charCodeAt(i);
-      }
-      const blob = new Blob([bytes], { type: 'application/pdf' });
-      const url = URL.createObjectURL(blob);
-      setBlobUrl(url);
-      return () => URL.revokeObjectURL(url);
-    } catch (e) {
-      console.error("Failed to generate PDF blob", e);
-    }
-  }, [pdf.base64]);
-
-  return (
-    <div className="w-full h-full flex flex-col bg-black overflow-hidden">
-      <div className="flex-1 bg-[#050505] relative">
-        {blobUrl ? (
-          <iframe
-            src={`${blobUrl}#view=FitH&toolbar=0&navpanes=0`}
-            className="w-full h-full border-none"
-            title="Manuscript Viewer"
-            allow="fullscreen"
-          />
-        ) : (
-          <div className="h-full flex flex-col items-center justify-center space-y-4">
-            <div className="w-10 h-10 border-2 border-[#a34a28] border-t-transparent animate-spin rounded-full"></div>
-            <span className="text-[10px] font-black tracking-widest text-white/20 uppercase">Synchronizing Neural Link...</span>
-          </div>
-        )}
-      </div>
     </div>
   );
 };
