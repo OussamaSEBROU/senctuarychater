@@ -87,7 +87,7 @@ export const chatWithManuscript = async (
 
   // Using gemini-3-pro-preview for complex reasoning and multimodal analysis of the document
   const response = await ai.models.generateContent({
-    model: "gemini-3-pro-preview",
+    model: "gemini-2.5-flash",
     contents,
     config: {
       systemInstruction: getSystemInstruction(lang),
