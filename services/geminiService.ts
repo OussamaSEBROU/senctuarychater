@@ -6,15 +6,18 @@ import { translations } from "../translations";
 let chatSession: Chat | null = null;
 let currentPdfBase64: string | null = null;
 
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher with a focus on deep semantic analysis. 
-Your response style is similar to ChatGPT - engaging, structured, and narrative-driven. 
+const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher. 
+Your response style is engaging, highly structured, and narrative-driven.
 
 CRITICAL PROTOCOLS:
-1. You are analyzing an uploaded PDF. Every answer must derive from its core logic or historical context.
-2. Structure your answers with clear sections, use **bold text** for emphasis, and LaTeX for technical formulas.
-3. Don't be dry; explain concepts like a world-class scholar lecturing a brilliant student.
-4. ALWAYS match the language of the user. If they ask in Arabic, respond in high-quality academic Arabic. 
-5. If the user asks for a summary or explanation, provide a flowing narrative that keeps them engaged.`;
+1. The user has uploaded a PDF manuscript. You have access to its full content in the session history.
+2. Analyze questions based on the manuscript's internal logic and deep context.
+3. Use **bold text** for emphasis and LaTeX for technical formulas.
+4. Explanations should be scholarly yet clear.
+5. Language: Match the user's language. If they speak Arabic, use high-level academic Arabic.
+6. NO re-summarizing the whole file unless asked. Be direct and efficient.`;
+
+const MODEL_NAME = "gemini-2.5-flash";
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -22,12 +25,10 @@ export const getGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-const MODEL_NAME = "gemini-2.5-flash";
-
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   const ai = getGeminiClient();
   currentPdfBase64 = pdfBase64;
-  chatSession = null;
+  chatSession = null; // Reset session for a new file
 
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
@@ -55,10 +56,15 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     },
   });
 
+  if (!response || !response.text) {
+    throw new Error("No response from neural core.");
+  }
+
   try {
-    return JSON.parse(response.text || "[]");
+    const cleanedText = response.text.trim();
+    return JSON.parse(cleanedText);
   } catch (error) {
-    console.error("Error parsing axioms:", error);
+    console.error("Axiom extraction parsing error:", error);
     return [];
   }
 };
@@ -69,25 +75,37 @@ export const chatWithManuscript = async (
 ): Promise<string> => {
   const ai = getGeminiClient();
 
+  // Create session if it doesn't exist
   if (!chatSession) {
     chatSession = ai.chats.create({
       model: MODEL_NAME,
       config: {
         systemInstruction: getSystemInstruction(lang),
-        temperature: 0.8,
+        temperature: 0.7,
       },
     });
 
+    // Send the PDF only ONCE at the start of the session to establish context
     if (currentPdfBase64) {
-      await chatSession.sendMessage({
+      // FIX: sendMessage's 'message' property expects Part | Part[] | string. 
+      // Passing an object with 'parts' (a Content object) was causing a type error.
+      const response = await chatSession.sendMessage({
         message: [
           { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "The manuscript is uploaded. Please acknowledge and be ready for detailed intellectual interrogation." }
+          { text: "Context initialized. This is the manuscript for our deep research. Please acknowledge its receipt in a short scholarly sentence and then answer my first question: " + userPrompt }
         ]
       });
+      // FIX: Use the response returned from sendMessage instead of getHistory.
+      return response.text || "The Sanctuary is ready.";
     }
   }
 
-  const response = await chatSession.sendMessage({ message: userPrompt });
-  return response.text || "No response generated.";
+  // Subsequent calls DO NOT send the PDF again. They just send the text prompt.
+  try {
+    const response = await chatSession.sendMessage({ message: userPrompt });
+    return response.text || "No insights found in the current neural layer.";
+  } catch (error: any) {
+    console.error("Chat Error:", error);
+    return `Neural failure: ${error?.message || 'Unknown disconnection'}`;
+  }
 };
