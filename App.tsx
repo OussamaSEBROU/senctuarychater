@@ -76,15 +76,15 @@ const App: React.FC = () => {
         onNewChat={handleNewChat}
       />
 
-      <header className="h-14 md:h-20 px-4 md:px-10 flex items-center justify-between border-b border-white/5 bg-black/40 backdrop-blur-3xl z-[60] shrink-0">
-        <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-white/5 rounded-xl border border-transparent hover:border-white/10">
+      <header className="h-14 md:h-16 px-4 md:px-8 flex items-center justify-between border-b border-white/5 bg-black/40 backdrop-blur-3xl z-[60] shrink-0">
+        <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
-        <h1 className="text-[10px] font-black tracking-[0.6em] text-white/40 uppercase">{t.title}</h1>
+        <h1 className="text-[10px] font-black tracking-[0.4em] text-white/40 uppercase">{t.title}</h1>
         {pdf && (
           <button 
             onClick={() => setShowViewer(!showViewer)}
-            className={`p-2.5 rounded-xl transition-all border ${showViewer ? 'bg-[#a34a28] border-[#a34a28] text-white shadow-none' : 'bg-white/5 border-white/5 text-white/40'}`}
+            className={`p-2 rounded-xl transition-all border ${showViewer ? 'bg-white border-white text-black' : 'bg-white/5 border-white/5 text-white/40'}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
           </button>
@@ -94,7 +94,6 @@ const App: React.FC = () => {
       <main className="flex-1 overflow-hidden relative z-10">
         {!pdf ? (
           <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-            {/* إزالة التأثيرات الضوئية sanctuay-3d و text-glow */}
             <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase">{t.sanctuary}</h2>
             <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-[#a34a28] max-w-2xl leading-tight">
               {t.introText}
@@ -115,7 +114,7 @@ const App: React.FC = () => {
             {flowStep === 'axioms' && (
               <div className="h-full flex flex-col items-center justify-center p-4">
                  <h3 className="text-2xl md:text-5xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
-                 <div ref={carouselRef} className="w-full flex gap-6 px-[10%] overflow-x-auto snap-x scrollbar-none pb-10">
+                 <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10">
                     {axioms.map((ax, i) => (
                       <div key={i} className="min-w-[280px] md:min-w-[400px] snap-center">
                         <AxiomCard axiom={ax} index={i} />
