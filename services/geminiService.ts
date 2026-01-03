@@ -18,49 +18,57 @@ CRITICAL PROTOCOLS:
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key is not configured.");
+  if (!apiKey || apiKey === "undefined") {
+    console.error("Critical: API_KEY is missing in the environment.");
+    throw new Error("API_KEY_MISSING");
+  }
   return new GoogleGenAI({ apiKey });
 };
 
-// استخدام Gemini 3 Flash لسرعة استجابة فائقة وقدرة معالجة PDF متطورة
-const MODEL_NAME ="gemini-2.5-flash";
+// استخدام موديل مستقر وفعال لمعالجة المستندات
+const MODEL_NAME = "gemini-2.5-flash";
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
-  const ai = getGeminiClient();
-  currentPdfBase64 = pdfBase64;
-  chatSession = null; // إعادة ضبط الجلسة عند رفع ملف جديد
+  try {
+    const ai = getGeminiClient();
+    currentPdfBase64 = pdfBase64;
+    chatSession = null; 
 
-  const response = await ai.models.generateContent({
-    model: MODEL_NAME,
-    contents: {
-      parts: [
-        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-        { text: translations[lang].extractionPrompt(lang) },
-      ],
-    },
-    config: {
-      systemInstruction: getSystemInstruction(lang),
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            term: { type: Type.STRING },
-            definition: { type: Type.STRING },
-            significance: { type: Type.STRING }
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [
+          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+          { text: translations[lang].extractionPrompt(lang) },
+        ],
+      },
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              term: { type: Type.STRING },
+              definition: { type: Type.STRING },
+              significance: { type: Type.STRING }
+            },
+            required: ["term", "definition", "significance"],
           },
-          required: ["term", "definition", "significance"],
         },
       },
-    },
-  });
+    });
 
-  try {
-    return JSON.parse(response.text || "[]");
-  } catch (error) {
-    console.error("Error parsing axioms:", error);
-    return [];
+    if (!response.text) {
+      throw new Error("EMPTY_RESPONSE");
+    }
+
+    return JSON.parse(response.text);
+  } catch (error: any) {
+    console.error("Error in extractAxioms:", error);
+    // إعادة رمي الخطأ ليتم معالجته في App.tsx مع تفاصيل أكثر
+    throw error;
   }
 };
 
@@ -81,12 +89,12 @@ export const chatWithManuscriptStream = async (
         },
       });
 
-      // إرسال الملف في أول رسالة لربط السياق
       if (currentPdfBase64) {
+        // نرسل الملف في سياق المحادثة لضمان بقاء النموذج متصلاً بالمخطوط
         await chatSession.sendMessage({
           message: [
             { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-            { text: "This is the manuscript we will discuss. Acknowledge its presence briefly then focus on my future queries." }
+            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
           ]
         });
       }
@@ -100,8 +108,9 @@ export const chatWithManuscriptStream = async (
         onChunk(chunkText);
       }
     }
-  } catch (error) {
-    chatSession = null; // تنظيف الجلسة في حال حدوث خطأ للسماح بإعادة المحاولة
+  } catch (error: any) {
+    console.error("Stream error in geminiService:", error);
+    chatSession = null; 
     throw error;
   }
 };
