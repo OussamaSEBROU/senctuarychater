@@ -1,5 +1,5 @@
 
-import { GoogleGenAI, Type, Chat } from "@google/genai";
+import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
 import { Axiom, Language } from "../types";
 import { translations } from "../translations";
 
@@ -7,14 +7,14 @@ let chatSession: Chat | null = null;
 let currentPdfBase64: string | null = null;
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher with a focus on deep semantic analysis. 
-Your response style is similar to ChatGPT - engaging, structured, and narrative-driven. 
+Your response style is engaging, structured, and narrative-driven. 
 
 CRITICAL PROTOCOLS:
 1. You are analyzing an uploaded PDF. Every answer must derive from its core logic or historical context.
 2. Structure your answers with clear sections, use **bold text** for emphasis, and LaTeX for technical formulas.
 3. Don't be dry; explain concepts like a world-class scholar lecturing a brilliant student.
 4. ALWAYS match the language of the user. If they ask in Arabic, respond in high-quality academic Arabic. 
-5. If the user asks for a summary or explanation, provide a flowing narrative that keeps them engaged.`;
+5. Provide a flowing narrative that keeps the user engaged.`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -63,10 +63,11 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
   }
 };
 
-export const chatWithManuscript = async (
+export const chatWithManuscriptStream = async (
   userPrompt: string,
-  lang: Language
-): Promise<string> => {
+  lang: Language,
+  onChunk: (text: string) => void
+): Promise<void> => {
   const ai = getGeminiClient();
 
   if (!chatSession) {
@@ -82,12 +83,18 @@ export const chatWithManuscript = async (
       await chatSession.sendMessage({
         message: [
           { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "The manuscript is uploaded. Please acknowledge and be ready for detailed intellectual interrogation." }
+          { text: "The manuscript is uploaded. Focus on speed and precision." }
         ]
       });
     }
   }
 
-  const response = await chatSession.sendMessage({ message: userPrompt });
-  return response.text || "No response generated.";
+  const result = await chatSession.sendMessageStream({ message: userPrompt });
+  
+  for await (const chunk of result) {
+    const chunkText = (chunk as GenerateContentResponse).text;
+    if (chunkText) {
+      onChunk(chunkText);
+    }
+  }
 };
