@@ -6,57 +6,8 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Message, PDFData, Language } from '../types';
-import { chatWithManuscript } from '../services/geminiService';
+import { chatWithManuscriptStream } from '../services/geminiService';
 import { translations } from '../translations';
-
-const TypewriterText: React.FC<{ text: string; speed?: number }> = ({ text, speed = 10 }) => {
-  const [displayedText, setDisplayedText] = useState('');
-  const [isComplete, setIsComplete] = useState(false);
-
-  useEffect(() => {
-    let i = 0;
-    const words = text.split(' ');
-    setDisplayedText('');
-    setIsComplete(false);
-
-    const timer = setInterval(() => {
-      if (i < words.length) {
-        setDisplayedText((prev) => prev + (prev ? ' ' : '') + words[i]);
-        i++;
-      } else {
-        clearInterval(timer);
-        setIsComplete(true);
-      }
-    }, speed);
-
-    return () => clearInterval(timer);
-  }, [text, speed]);
-
-  return (
-    <div className={!isComplete ? 'after:content-["_▋"] after:animate-pulse after:text-glow-orange' : ''}>
-      <ReactMarkdown
-        remarkPlugins={[remarkMath]}
-        rehypePlugins={[rehypeKatex]}
-        components={{
-          code({ node, inline, className, children, ...props }: any) {
-            const match = /language-(\w+)/.exec(className || '');
-            return !inline && match ? (
-              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
-                {String(children).replace(/\n$/, '')}
-              </SyntaxHighlighter>
-            ) : (
-              <code className="bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props}>{children}</code>
-            );
-          },
-          p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> },
-          strong({children}) { return <strong className="text-glow-orange font-bold">{children}</strong> }
-        }}
-      >
-        {displayedText}
-      </ReactMarkdown>
-    </div>
-  );
-};
 
 interface ChatInterfaceProps {
   pdf: PDFData;
@@ -87,15 +38,36 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
     const userText = input;
     const userMessage: Message = { role: 'user', content: userText };
-    setMessages(prev => [...prev, userMessage]);
+    
+    // Add user message and a placeholder for AI response
+    setMessages(prev => [...prev, userMessage, { role: 'model', content: '' }]);
     setInput('');
     setIsLoading(true);
 
+    let accumulatedResponse = "";
+
     try {
-      const response = await chatWithManuscript(userText, lang);
-      setMessages(prev => [...prev, { role: 'model', content: response }]);
+      await chatWithManuscriptStream(userText, lang, (chunk) => {
+        accumulatedResponse += chunk;
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { 
+            role: 'model', 
+            content: accumulatedResponse 
+          };
+          return newMessages;
+        });
+      });
     } catch (error) {
-      setMessages(prev => [...prev, { role: 'model', content: lang === 'ar' ? "عذراً، انقطع الاتصال بالمحراب." : "Neural link failure." }]);
+      console.error("Stream error:", error);
+      setMessages(prev => {
+        const newMessages = [...prev];
+        newMessages[newMessages.length - 1] = { 
+          role: 'model', 
+          content: lang === 'ar' ? "عذراً، انقطع الاتصال بالمحراب." : "Neural link failure." 
+        };
+        return newMessages;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -117,8 +89,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
           {messages.map((msg, i) => {
             const ar = isArabic(msg.content);
-            const isLastMessage = i === messages.length - 1 && msg.role === 'model';
             const isUser = msg.role === 'user';
+            const isStreaming = i === messages.length - 1 && msg.role === 'model' && isLoading;
 
             return (
               <div key={i} className={`flex w-full animate-in fade-in duration-500 ${isUser ? 'justify-end' : 'justify-start'}`}>
@@ -131,47 +103,33 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                   </div>
                   
                   <div className={`flex-1 min-w-0 ${isUser ? 'bg-[#1a1a1a] rounded-2xl px-4 py-3 border border-white/5' : ''}`}>
-                    <div className={`prose prose-invert prose-sm md:prose-base max-w-none ${ar ? 'text-right font-academic' : 'text-left'}`}>
-                      {isLastMessage ? (
-                        <TypewriterText text={msg.content} />
-                      ) : (
-                        <ReactMarkdown
-                          remarkPlugins={[remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                          components={{
-                            code({ node, inline, className, children, ...props }: any) {
-                              const match = /language-(\w+)/.exec(className || '');
-                              return !inline && match ? (
-                                <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
-                                  {String(children).replace(/\n$/, '')}
-                                </SyntaxHighlighter>
-                              ) : (
-                                <code className="bg-white/10 px-1.5 py-0.5 rounded text-glow-orange font-mono text-xs" {...props}>{children}</code>
-                              );
-                            },
-                            p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> },
-                            strong({children}) { return <strong className="text-glow-orange font-bold">{children}</strong> }
-                          }}
-                        >
-                          {msg.content}
-                        </ReactMarkdown>
-                      )}
+                    <div className={`prose prose-invert prose-sm md:prose-base max-w-none ${ar ? 'text-right font-academic' : 'text-left'} ${isStreaming ? 'after:content-["_▋"] after:animate-pulse after:text-orange-500' : ''}`}>
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          code({ node, inline, className, children, ...props }: any) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            return !inline && match ? (
+                              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className="bg-white/10 px-1.5 py-0.5 rounded text-glow-orange font-mono text-xs" {...props}>{children}</code>
+                            );
+                          },
+                          p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> },
+                          strong({children}) { return <strong className="text-glow-orange font-bold">{children}</strong> }
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
                     </div>
                   </div>
                 </div>
               </div>
             );
           })}
-          
-          {isLoading && (
-            <div className="flex justify-start">
-               <div className="flex gap-1.5 bg-white/5 p-2 px-4 rounded-full border border-white/5">
-                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce shadow-[0_0_8px_rgba(163,74,40,0.5)]"></div>
-                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-delay:0.2s] shadow-[0_0_8px_rgba(163,74,40,0.5)]"></div>
-                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-delay:0.4s] shadow-[0_0_8px_rgba(163,74,40,0.5)]"></div>
-               </div>
-            </div>
-          )}
         </div>
       </div>
 
@@ -206,7 +164,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
             </div>
           </form>
           <p className="mt-3 text-center text-[8px] md:text-[10px] text-white/10 uppercase tracking-widest font-black">
-            Powered by Gemini 2.0 • Neural Sanctuary V3.5
+            Powered by Gemini 3.0 • Real-Time Stream Logic
           </p>
         </div>
       </div>
