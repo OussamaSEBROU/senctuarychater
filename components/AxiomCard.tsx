@@ -47,3 +47,4 @@ const AxiomCard: React.FC<AxiomCardProps> = ({ axiom, index }) => {
 };
 
 export default AxiomCard;
+
