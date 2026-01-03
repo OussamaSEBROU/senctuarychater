@@ -1,5 +1,5 @@
 
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef } from 'react';
 import { Axiom, PDFData, Language } from './types';
 import { extractAxioms } from './services/geminiService';
 import AxiomCard from './components/AxiomCard';
@@ -22,30 +22,16 @@ const App: React.FC = () => {
 
   const t = translations[lang];
 
-  // Auto-scroll carousel when axioms loaded
-  useEffect(() => {
-    if (axioms.length > 0 && carouselRef.current) {
-      carouselRef.current.scrollTo({ left: 0, behavior: 'smooth' });
-    }
-  }, [axioms]);
-
   const handleSynthesis = async (base64: string) => {
     setIsSynthesizing(true);
     setError(null);
-    setAxioms([]); // Reset to ensure no stale data
-    
+    setFlowStep('axioms');
     try {
       const extracted = await extractAxioms(base64, lang);
-      if (extracted && extracted.length > 0) {
-        setAxioms(extracted);
-        setFlowStep('axioms'); // Ensure we are on axioms step
-      } else {
-        throw new Error("No axioms extracted");
-      }
-    } catch (err: any) {
-      console.error("Synthesis error:", err);
-      setError(lang === 'ar' ? "تعذر استخراج البديهيات. تأكد من جودة المخطوط." : "Failed to extract axioms. Check PDF quality.");
-      setPdf(null); // Reset on error to allow retry
+      setAxioms(extracted);
+    } catch (err) {
+      console.error(err);
+      setError(lang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.");
     } finally {
       setIsSynthesizing(false);
     }
@@ -54,11 +40,6 @@ const App: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (file.type !== 'application/pdf') {
-      setError(lang === 'ar' ? "يرجى رفع ملف PDF فقط." : "Please upload a PDF file only.");
-      return;
-    }
-    
     const reader = new FileReader();
     reader.onload = async () => {
       const result = reader.result as string;
@@ -80,15 +61,10 @@ const App: React.FC = () => {
   return (
     <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {isSynthesizing && (
-        <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
-          <div className="relative">
-            <div className="spinner-arc"></div>
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-2 h-2 bg-[#a34a28] rounded-full animate-ping"></div>
-            </div>
-          </div>
-          <h2 className="text-white text-lg font-black tracking-[0.4em] mt-12 mb-6 uppercase animate-pulse">{t.synthesis}</h2>
-          <p className={`italic max-w-md leading-relaxed opacity-60 ${lang === 'ar' ? 'text-sm' : 'text-[10px]'}`}>{t.covenant}</p>
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center">
+          <div className="spinner-arc mb-12"></div>
+          <h2 className="text-white text-lg font-black tracking-[0.4em] mb-10 uppercase">{t.synthesis}</h2>
+          <p className={`italic max-w-md ${lang === 'ar' ? 'text-sm' : 'text-xs opacity-60'}`}>{t.covenant}</p>
         </div>
       )}
 
@@ -108,7 +84,7 @@ const App: React.FC = () => {
         {pdf && (
           <button 
             onClick={() => setShowViewer(!showViewer)}
-            className={`p-2 rounded-xl transition-all border ${showViewer ? 'bg-white border-white text-black shadow-[0_0_15px_rgba(255,255,255,0.3)]' : 'bg-white/5 border-white/5 text-white/40 hover:text-white'}`}
+            className={`p-2 rounded-xl transition-all border ${showViewer ? 'bg-white border-white text-black' : 'bg-white/5 border-white/5 text-white/40'}`}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
           </button>
@@ -117,8 +93,9 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-hidden relative z-10">
         {!pdf ? (
+          /* الواجهة الأولى تبقى بالإنجليزية دائماً كما هو مطلوب */
           <div className="h-full flex flex-col items-center justify-center p-6 text-center" dir="ltr">
-            <h2 className="text-7xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
+            <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
               {translations.en.sanctuary}
             </h2>
             <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-glow-orange max-w-2xl leading-tight font-sans">
@@ -135,13 +112,13 @@ const App: React.FC = () => {
                  </span>
               </div>
             </label>
-            {error && <p className="mt-8 text-red-500 text-[10px] font-black uppercase tracking-[0.3em] bg-red-500/10 px-6 py-2 rounded-full border border-red-500/20">{error}</p>}
+            {error && <p className="mt-4 text-red-500 text-xs font-bold uppercase tracking-widest">{error}</p>}
           </div>
         ) : (
           <div className="h-full flex flex-col">
             {flowStep === 'axioms' && (
               <div className="h-full flex flex-col items-center justify-center p-4">
-                 <h3 className="text-2xl md:text-4xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
+                 <h3 className="text-2xl md:text-5xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
                  <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10">
                     {axioms.map((ax, i) => (
                       <div key={i} className="min-w-[280px] md:min-w-[400px] snap-center">
@@ -149,10 +126,7 @@ const App: React.FC = () => {
                       </div>
                     ))}
                  </div>
-                 <button 
-                  onClick={() => setFlowStep('chat')} 
-                  className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)] mt-4 active:scale-95"
-                 >
+                 <button onClick={() => setFlowStep('chat')} className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)]">
                    {t.deepChatBtn}
                  </button>
               </div>
@@ -167,7 +141,7 @@ const App: React.FC = () => {
                     <ManuscriptViewer pdf={pdf} lang={lang} />
                   </div>
                 )}
-                <div className="flex-1 h-full bg-[#080808] transition-all duration-500">
+                <div className={`flex-1 h-full bg-[#080808] transition-all duration-500`}>
                   <ChatInterface pdf={pdf} lang={lang} />
                 </div>
               </div>
