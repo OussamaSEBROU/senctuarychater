@@ -1,116 +1,207 @@
 
-import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
-import { Axiom, Language } from "../types";
-import { translations } from "../translations";
+import React, { useState, useRef, useEffect } from 'react';
+import { Axiom, PDFData, Language } from './types';
+import { extractAxioms } from './services/geminiService';
+import AxiomCard from './components/AxiomCard';
+import ChatInterface from './components/ChatInterface';
+import Sidebar from './components/Sidebar';
+import ManuscriptViewer from './components/ManuscriptViewer';
+import { translations } from './translations';
 
-let chatSession: Chat | null = null;
-let currentPdfBase64: string | null = null;
+const App: React.FC = () => {
+  const [pdf, setPdf] = useState<PDFData | null>(null);
+  const [axioms, setAxioms] = useState<Axiom[]>([]);
+  const [isSynthesizing, setIsSynthesizing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lang, setLang] = useState<Language>('en');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  
+  const [flowStep, setFlowStep] = useState<'axioms' | 'chat'>('axioms');
+  const [showViewer, setShowViewer] = useState(false);
+  const carouselRef = useRef<HTMLDivElement>(null);
 
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher with a focus on deep semantic analysis. 
-Your response style is engaging, structured, and narrative-driven. 
+  const t = translations[lang];
 
-CRITICAL PROTOCOLS:
-1. You are analyzing an uploaded PDF. Every answer must derive from its core logic or historical context.
-2. Structure your answers with clear sections, use **bold text** for emphasis, and LaTeX for technical formulas.
-3. Don't be dry; explain concepts like a world-class scholar lecturing a brilliant student.
-4. ALWAYS match the language of the user. If they ask in Arabic, respond in high-quality academic Arabic. 
-5. Provide a flowing narrative that keeps the user engaged.`;
-
-export const getGeminiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "undefined") {
-    console.error("Critical: API_KEY is missing in the environment.");
-    throw new Error("API_KEY_MISSING");
-  }
-  return new GoogleGenAI({ apiKey });
-};
-
-// استخدام موديل مستقر وفعال لمعالجة المستندات
-const MODEL_NAME = "gemini-3-flash-preview";
-
-export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
-  try {
-    const ai = getGeminiClient();
-    currentPdfBase64 = pdfBase64;
-    chatSession = null; 
-
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: translations[lang].extractionPrompt(lang) },
-        ],
-      },
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              term: { type: Type.STRING },
-              definition: { type: Type.STRING },
-              significance: { type: Type.STRING }
-            },
-            required: ["term", "definition", "significance"],
-          },
-        },
-      },
-    });
-
-    if (!response.text) {
-      throw new Error("EMPTY_RESPONSE");
+  useEffect(() => {
+    if (axioms.length > 0 && carouselRef.current) {
+      carouselRef.current.scrollTo({ left: 0, behavior: 'smooth' });
     }
+  }, [axioms]);
 
-    return JSON.parse(response.text);
-  } catch (error: any) {
-    console.error("Error in extractAxioms:", error);
-    // إعادة رمي الخطأ ليتم معالجته في App.tsx مع تفاصيل أكثر
-    throw error;
-  }
-};
+  const handleSynthesis = async (base64: string) => {
+    setIsSynthesizing(true);
+    setError(null);
+    setAxioms([]);
+    setFlowStep('axioms');
 
-export const chatWithManuscriptStream = async (
-  userPrompt: string,
-  lang: Language,
-  onChunk: (text: string) => void
-): Promise<void> => {
-  const ai = getGeminiClient();
-
-  try {
-    if (!chatSession) {
-      chatSession = ai.chats.create({
-        model: MODEL_NAME,
-        config: {
-          systemInstruction: getSystemInstruction(lang),
-          temperature: 0.7,
-        },
-      });
-
-      if (currentPdfBase64) {
-        // نرسل الملف في سياق المحادثة لضمان بقاء النموذج متصلاً بالمخطوط
-        await chatSession.sendMessage({
-          message: [
-            { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
-          ]
-        });
+    try {
+      const extracted = await extractAxioms(base64, lang);
+      if (extracted && extracted.length > 0) {
+        setAxioms(extracted);
+      } else {
+        throw new Error("EMPTY_RESULT");
       }
+    } catch (err: any) {
+      console.error("Full synthesis error object:", err);
+      
+      let errorMsg = lang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.";
+      
+      if (err.message === "API_KEY_MISSING") {
+        errorMsg = lang === 'ar' ? "خطأ: مفتاح API غير متوفر في بيئة العمل." : "Error: API Key is missing in Render environment.";
+      } else if (err.status === 429) {
+        errorMsg = lang === 'ar' ? "تم تجاوز معدل الطلبات المسموح به." : "Rate limit exceeded. Please wait a moment.";
+      } else if (err.message?.includes("Safety")) {
+        errorMsg = lang === 'ar' ? "تم حظر المحتوى لأسباب تتعلق بالسلامة." : "Content blocked due to safety filters.";
+      } else {
+        errorMsg += lang === 'ar' ? " يرجى التأكد من جودة الملف أو مفتاح الـ API." : " Please check PDF quality or API configuration.";
+      }
+      
+      setError(errorMsg);
+      setPdf(null);
+    } finally {
+      setIsSynthesizing(false);
     }
+  };
 
-    const result = await chatSession.sendMessageStream({ message: userPrompt });
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (file.type !== 'application/pdf') {
+      setError(lang === 'ar' ? "يرجى رفع ملف PDF فقط." : "Please upload a PDF file only.");
+      return;
+    }
     
-    for await (const chunk of result) {
-      const chunkText = (chunk as GenerateContentResponse).text;
-      if (chunkText) {
-        onChunk(chunkText);
-      }
-    }
-  } catch (error: any) {
-    console.error("Stream error in geminiService:", error);
-    chatSession = null; 
-    throw error;
-  }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const result = reader.result as string;
+      const base64 = result.substring(result.indexOf(',') + 1);
+      setPdf({ base64, name: file.name });
+      handleSynthesis(base64);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const handleNewChat = () => {
+    setPdf(null);
+    setAxioms([]);
+    setFlowStep('axioms');
+    setShowViewer(false);
+    setError(null);
+  };
+
+  return (
+    <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      {isSynthesizing && (
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
+          <div className="spinner-arc mb-12"></div>
+          <h2 className="text-white text-lg font-black tracking-[0.4em] mb-10 uppercase">{t.synthesis}</h2>
+          <p className={`italic max-w-md ${lang === 'ar' ? 'text-sm' : 'text-xs opacity-60 leading-relaxed'}`}>{t.covenant}</p>
+        </div>
+      )}
+
+      <Sidebar 
+        isOpen={isSidebarOpen} 
+        onClose={() => setIsSidebarOpen(false)} 
+        lang={lang} 
+        setLang={setLang}
+        onNewChat={handleNewChat}
+      />
+
+      <header className="h-14 md:h-16 px-4 md:px-8 flex items-center justify-between border-b border-white/5 bg-black/40 backdrop-blur-3xl z-[60] shrink-0">
+        <div className="flex items-center gap-4">
+          <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
+          </button>
+          <h1 className="text-[10px] font-black tracking-[0.4em] text-white/40 uppercase hidden sm:block">{translations.en.title}</h1>
+        </div>
+        
+        {pdf && (
+          <button 
+            onClick={() => setShowViewer(!showViewer)}
+            className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-[10px] font-black tracking-widest uppercase ${showViewer ? 'bg-white border-white text-black' : 'bg-white/5 border-white/5 text-white/40 hover:text-white'}`}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
+            <span className="hidden md:inline">{showViewer ? (lang === 'ar' ? 'إغلاق العارض' : 'Close Viewer') : (lang === 'ar' ? 'فتح المخطوط' : 'Open Manuscript')}</span>
+          </button>
+        )}
+      </header>
+
+      <main className="flex-1 overflow-hidden relative z-10">
+        {!pdf ? (
+          <div className="h-full flex flex-col items-center justify-center p-6 text-center" dir="ltr">
+            <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
+              {translations.en.sanctuary}
+            </h2>
+            <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-glow-orange max-w-2xl leading-tight font-sans">
+              {translations.en.introText}
+            </p>
+            <label className="w-full max-w-sm group relative block aspect-[1.3/1] border border-dashed border-white/10 rounded-[3rem] hover:border-[#a34a28]/40 transition-all cursor-pointer bg-white/[0.01]">
+              <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} />
+              <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6">
+                 <div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-[#a34a28]/10 transition-all duration-500 shadow-[0_0_20px_rgba(163,74,40,0)] group-hover:shadow-[0_0_20px_rgba(163,74,40,0.2)]">
+                    <svg className="w-8 h-8 text-white/10 group-hover:text-[#a34a28] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                 </div>
+                 <span className="text-[10px] md:text-xs font-black tracking-[0.4em] text-white/20 uppercase group-hover:text-white/60">
+                   {translations.en.upload}
+                 </span>
+              </div>
+            </label>
+            {error && (
+              <div className="mt-8 max-w-md mx-auto">
+                <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] bg-red-500/10 px-6 py-2 rounded-full border border-red-500/20 shadow-lg">
+                  {error}
+                </p>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="h-full flex flex-col lg:flex-row relative">
+            <div className={`flex-1 flex flex-col transition-all duration-700 ease-in-out ${showViewer ? 'lg:w-1/2 opacity-100' : 'lg:w-full'}`}>
+              {flowStep === 'axioms' && (
+                <div className="h-full flex flex-col items-center justify-center p-4">
+                   <h3 className="text-2xl md:text-5xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
+                   <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10">
+                      {axioms.length > 0 ? axioms.map((ax, i) => (
+                        <div key={i} className="min-w-[280px] md:min-w-[400px] snap-center">
+                          <AxiomCard axiom={ax} index={i} />
+                        </div>
+                      )) : (
+                        <div className="w-full flex justify-center py-20 opacity-20">
+                           <div className="w-10 h-10 border-2 border-white/10 border-t-white/40 rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                   </div>
+                   <button 
+                    onClick={() => { setFlowStep('chat'); if(window.innerWidth > 1024) setShowViewer(true); }} 
+                    className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)] mt-4 active:scale-95"
+                   >
+                     {t.deepChatBtn}
+                   </button>
+                </div>
+              )}
+              {flowStep === 'chat' && (
+                <div className="h-full flex-1 bg-[#080808]">
+                  <ChatInterface pdf={pdf} lang={lang} />
+                </div>
+              )}
+            </div>
+
+            {showViewer && (
+              <div className={`fixed inset-0 lg:relative lg:inset-auto lg:w-1/2 bg-black z-[70] lg:z-10 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)]`}>
+                <div className="flex lg:hidden items-center justify-between p-4 bg-[#1a1a1a] border-b border-white/10">
+                   <h4 className="text-[10px] font-black tracking-widest uppercase text-white/40">{t.viewer}</h4>
+                   <button onClick={() => setShowViewer(false)} className="p-2 bg-white/5 rounded-full text-white/60">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                   </button>
+                </div>
+                <ManuscriptViewer pdf={pdf} lang={lang} />
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
 };
+
+export default App;
