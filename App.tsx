@@ -62,9 +62,9 @@ const App: React.FC = () => {
     <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {isSynthesizing && (
         <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center">
-          <div className="spinner-arc mb-12 !border-t-[#a34a28]"></div>
+          <div className="spinner-arc mb-12"></div>
           <h2 className="text-white text-lg font-black tracking-[0.4em] mb-10 uppercase">{t.synthesis}</h2>
-          <p className="text-orange-200/60 italic max-w-md">{t.covenant}</p>
+          <p className={`italic max-w-md ${lang === 'ar' ? 'text-sm' : 'text-xs opacity-60'}`}>{t.covenant}</p>
         </div>
       )}
 
@@ -80,7 +80,7 @@ const App: React.FC = () => {
         <button onClick={() => setIsSidebarOpen(true)} className="p-2 hover:bg-white/5 rounded-xl transition-colors">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M4 6h16M4 12h16M4 18h16" /></svg>
         </button>
-        <h1 className="text-[10px] font-black tracking-[0.4em] text-white/40 uppercase">{t.title}</h1>
+        <h1 className="text-[10px] font-black tracking-[0.4em] text-white/40 uppercase">{translations.en.title}</h1>
         {pdf && (
           <button 
             onClick={() => setShowViewer(!showViewer)}
@@ -93,18 +93,23 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-hidden relative z-10">
         {!pdf ? (
-          <div className="h-full flex flex-col items-center justify-center p-6 text-center">
-            <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase">{t.sanctuary}</h2>
-            <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-[#a34a28] max-w-2xl leading-tight">
-              {t.introText}
+          /* الواجهة الأولى تبقى بالإنجليزية دائماً كما هو مطلوب */
+          <div className="h-full flex flex-col items-center justify-center p-6 text-center" dir="ltr">
+            <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
+              {translations.en.sanctuary}
+            </h2>
+            <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-glow-orange max-w-2xl leading-tight font-sans">
+              {translations.en.introText}
             </p>
             <label className="w-full max-w-sm group relative block aspect-[1.3/1] border border-dashed border-white/10 rounded-[3rem] hover:border-[#a34a28]/40 transition-all cursor-pointer bg-white/[0.01]">
               <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} />
               <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6">
-                 <div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-[#a34a28]/10 transition-all duration-500">
-                    <svg className="w-8 h-8 text-white/10 group-hover:text-[#a34a28]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                 <div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-[#a34a28]/10 transition-all duration-500 shadow-[0_0_20px_rgba(163,74,40,0)] group-hover:shadow-[0_0_20px_rgba(163,74,40,0.2)]">
+                    <svg className="w-8 h-8 text-white/10 group-hover:text-[#a34a28] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
                  </div>
-                 <span className="text-[10px] md:text-xs font-black tracking-[0.4em] text-white/20 uppercase group-hover:text-white/60">{t.upload}</span>
+                 <span className="text-[10px] md:text-xs font-black tracking-[0.4em] text-white/20 uppercase group-hover:text-white/60">
+                   {translations.en.upload}
+                 </span>
               </div>
             </label>
             {error && <p className="mt-4 text-red-500 text-xs font-bold uppercase tracking-widest">{error}</p>}
@@ -121,7 +126,7 @@ const App: React.FC = () => {
                       </div>
                     ))}
                  </div>
-                 <button onClick={() => setFlowStep('chat')} className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-none">
+                 <button onClick={() => setFlowStep('chat')} className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)]">
                    {t.deepChatBtn}
                  </button>
               </div>
