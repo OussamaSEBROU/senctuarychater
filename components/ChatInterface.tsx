@@ -33,7 +33,7 @@ const TypewriterText: React.FC<{ text: string; speed?: number }> = ({ text, spee
   }, [text, speed]);
 
   return (
-    <div className={!isComplete ? 'after:content-["_▋"] after:animate-pulse' : ''}>
+    <div className={!isComplete ? 'after:content-["_▋"] after:animate-pulse after:text-glow-orange' : ''}>
       <ReactMarkdown
         remarkPlugins={[remarkMath]}
         rehypePlugins={[rehypeKatex]}
@@ -48,7 +48,8 @@ const TypewriterText: React.FC<{ text: string; speed?: number }> = ({ text, spee
               <code className="bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props}>{children}</code>
             );
           },
-          p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> }
+          p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> },
+          strong({children}) { return <strong className="text-glow-orange font-bold">{children}</strong> }
         }}
       >
         {displayedText}
@@ -102,7 +103,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#050505] relative">
-      {/* الرسائل تأخذ كامل العرض المتاح مع هوامش بسيطة جداً */}
       <div 
         ref={scrollRef} 
         className="flex-1 overflow-y-auto pt-4 md:pt-6 pb-40 scrollbar-none"
@@ -126,8 +126,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                   className={`flex gap-3 w-full ${isUser ? 'max-w-[92%] flex-row-reverse' : 'max-w-full flex-row'}`}
                   dir={ar ? 'rtl' : 'ltr'}
                 >
-                  {/* أيقونة أصغر وأكثر بساطة */}
-                  <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black border mt-1 ${isUser ? 'bg-indigo-600 border-indigo-500' : 'bg-[#a34a28] border-orange-900'}`}>
+                  <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black border mt-1 ${isUser ? 'bg-indigo-600 border-indigo-500' : 'bg-[#a34a28] border-orange-900 shadow-[0_0_10px_rgba(163,74,40,0.3)]'}`}>
                     {isUser ? 'U' : 'AI'}
                   </div>
                   
@@ -147,10 +146,11 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                                   {String(children).replace(/\n$/, '')}
                                 </SyntaxHighlighter>
                               ) : (
-                                <code className="bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props}>{children}</code>
+                                <code className="bg-white/10 px-1.5 py-0.5 rounded text-glow-orange font-mono text-xs" {...props}>{children}</code>
                               );
                             },
-                            p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> }
+                            p({children}) { return <p className="mb-3 last:mb-0 leading-relaxed text-white/90">{children}</p> },
+                            strong({children}) { return <strong className="text-glow-orange font-bold">{children}</strong> }
                           }}
                         >
                           {msg.content}
@@ -166,16 +166,15 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
           {isLoading && (
             <div className="flex justify-start">
                <div className="flex gap-1.5 bg-white/5 p-2 px-4 rounded-full border border-white/5">
-                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-duration:0.8s]"></div>
-                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-duration:0.8s] [animation-delay:0.2s]"></div>
-                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-duration:0.8s] [animation-delay:0.4s]"></div>
+                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce shadow-[0_0_8px_rgba(163,74,40,0.5)]"></div>
+                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-delay:0.2s] shadow-[0_0_8px_rgba(163,74,40,0.5)]"></div>
+                  <div className="w-1.5 h-1.5 bg-[#a34a28] rounded-full animate-bounce [animation-delay:0.4s] shadow-[0_0_8px_rgba(163,74,40,0.5)]"></div>
                </div>
             </div>
           )}
         </div>
       </div>
 
-      {/* منطقة الإدخال: عائمة، واسعة، وبسيطة */}
       <div className="absolute bottom-0 left-0 right-0 p-4 md:p-8 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent z-20">
         <div className="max-w-5xl mx-auto">
           <form 
@@ -198,7 +197,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
               <button 
                 type="submit" 
                 disabled={isLoading || !input.trim()} 
-                className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-white text-black rounded-xl md:rounded-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-10 disabled:scale-100"
+                className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-white text-black rounded-xl md:rounded-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-10"
               >
                 <svg className={`w-5 h-5 md:w-6 md:h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 12h14M12 5l7 7-7 7" />
@@ -207,7 +206,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
             </div>
           </form>
           <p className="mt-3 text-center text-[8px] md:text-[10px] text-white/10 uppercase tracking-widest font-black">
-            Powered by Gemini 2.0 • Neural Core V3.5
+            Powered by Gemini 2.0 • Neural Sanctuary V3.5
           </p>
         </div>
       </div>
