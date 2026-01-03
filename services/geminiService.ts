@@ -6,66 +6,64 @@ import { translations } from "../translations";
 let chatSession: Chat | null = null;
 let currentPdfBase64: string | null = null;
 
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher. 
-Your response style is engaging, highly structured, and narrative-driven.
-
-CRITICAL PROTOCOLS:
-1. The user has uploaded a PDF manuscript. You have access to its full content in the session history.
-2. Analyze questions based on the manuscript's internal logic and deep context.
-3. Use **bold text** for emphasis and LaTeX for technical formulas.
-4. Explanations should be scholarly yet clear.
-5. Language: Match the user's language. If they speak Arabic, use high-level academic Arabic.
-6. NO re-summarizing the whole file unless asked. Be direct and efficient.`;
-
 const MODEL_NAME = "gemini-2.5-flash";
+
+const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher in a neural sanctuary.
+Your style is profound, academic, and structured.
+
+PROTOCOLS:
+1. You analyze manuscripts with deep axiomatic rigor.
+2. Use **bold text** for key concepts and LaTeX for any formulas.
+3. Match the user's language (Academic Arabic for Arabic users).
+4. Do not repeat the manuscript content; synthesize its essence.
+5. The manuscript is provided once at the start of the session.`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey) throw new Error("API Key is not configured.");
+  if (!apiKey) throw new Error("API Key missing.");
   return new GoogleGenAI({ apiKey });
 };
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   const ai = getGeminiClient();
   currentPdfBase64 = pdfBase64;
-  chatSession = null; // Reset session for a new file
-
-  const response = await ai.models.generateContent({
-    model: MODEL_NAME,
-    contents: {
-      parts: [
-        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-        { text: translations[lang].extractionPrompt(lang) },
-      ],
-    },
-    config: {
-      systemInstruction: getSystemInstruction(lang),
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.ARRAY,
-        items: {
-          type: Type.OBJECT,
-          properties: {
-            term: { type: Type.STRING },
-            definition: { type: Type.STRING },
-            significance: { type: Type.STRING }
-          },
-          required: ["term", "definition", "significance"],
-        },
-      },
-    },
-  });
-
-  if (!response || !response.text) {
-    throw new Error("No response from neural core.");
-  }
+  chatSession = null; // Clear previous session for new file context
 
   try {
-    const cleanedText = response.text.trim();
-    return JSON.parse(cleanedText);
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [
+          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+          { text: translations[lang].extractionPrompt(lang) },
+        ],
+      },
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              term: { type: Type.STRING, description: "The profound term" },
+              definition: { type: Type.STRING, description: "Scholarly definition" },
+              significance: { type: Type.STRING, description: "Overarching significance" }
+            },
+            required: ["term", "definition", "significance"],
+          },
+        },
+      },
+    });
+
+    const text = response.text;
+    if (!text) throw new Error("Empty response from AI");
+    
+    const parsed = JSON.parse(text.trim());
+    return Array.isArray(parsed) ? parsed : [];
   } catch (error) {
-    console.error("Axiom extraction parsing error:", error);
-    return [];
+    console.error("Critical Extraction Error:", error);
+    throw error;
   }
 };
 
@@ -75,7 +73,6 @@ export const chatWithManuscript = async (
 ): Promise<string> => {
   const ai = getGeminiClient();
 
-  // Create session if it doesn't exist
   if (!chatSession) {
     chatSession = ai.chats.create({
       model: MODEL_NAME,
@@ -85,27 +82,22 @@ export const chatWithManuscript = async (
       },
     });
 
-    // Send the PDF only ONCE at the start of the session to establish context
     if (currentPdfBase64) {
-      // FIX: sendMessage's 'message' property expects Part | Part[] | string. 
-      // Passing an object with 'parts' (a Content object) was causing a type error.
-      const response = await chatSession.sendMessage({
+      const initialResponse = await chatSession.sendMessage({
         message: [
           { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "Context initialized. This is the manuscript for our deep research. Please acknowledge its receipt in a short scholarly sentence and then answer my first question: " + userPrompt }
+          { text: `The manuscript is uploaded. Using its full context, answer this first inquiry: ${userPrompt}` }
         ]
       });
-      // FIX: Use the response returned from sendMessage instead of getHistory.
-      return response.text || "The Sanctuary is ready.";
+      return initialResponse.text || "Connection established.";
     }
   }
 
-  // Subsequent calls DO NOT send the PDF again. They just send the text prompt.
   try {
     const response = await chatSession.sendMessage({ message: userPrompt });
-    return response.text || "No insights found in the current neural layer.";
+    return response.text || "No insights extracted.";
   } catch (error: any) {
-    console.error("Chat Error:", error);
-    return `Neural failure: ${error?.message || 'Unknown disconnection'}`;
+    console.error("Chat failure:", error);
+    return `Neural failure: ${error.message || 'Unknown'}`;
   }
 };
