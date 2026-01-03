@@ -20,7 +20,7 @@ export const translations = {
     helpText: "Upload a PDF manuscript to begin. The system will extract core axioms, which you can then explore through a deep neural dialogue.",
     placeholder: "Interrogate the author's logic...",
     deepChatBtn: "Deep Knowledge Chat",
-    extractionPrompt: (lang: string) => `Extract 6 core 'Knowledge Axioms' from this manuscript. The entire response must be in English. Each axiom should include a profound term, a scholarly definition, and its overarching significance.`
+    extractionPrompt: (lang: string) => `Extract 6 core 'Knowledge Axioms' from this manuscript. The entire response must be in Arabic. Each axiom should include a profound term, a scholarly definition, and its overarching significance.`
   },
   ar: {
     title: "KNOWLEDGE AI",
@@ -38,8 +38,8 @@ export const translations = {
     covenant: "The Sanctuary Covenant: Direct reading and personal comprehension are the only paths to wisdom.",
     about: "About Us",
     help: "Help",
-    aboutText: "We are an elite neural research collective dedicated to the extraction of axiomatic truths from historical manuscripts.",
-    helpText: "Upload a PDF manuscript to begin. The system will extract core axioms, which you can then explore through a deep neural dialogue.",
+    aboutText: "نحن منظومة بحثية نخبوية مكرسة لاستخراج الحقائق البديهية من المخطوطات التاريخية باستخدام الذكاء الاصطناعي.",
+    helpText: "قم برفع مخطوطة بصيغة PDF للبدء. سيقوم النظام باستخراج البديهيات الأساسية، والتي يمكنك استكشافها بعمق من خلال حوار عصبي.",
     placeholder: "استجوب منطق المؤلف...",
     deepChatBtn: "Deep Knowledge Chat",
     extractionPrompt: (lang: string) => `استخرج 6 'بديهيات معرفية' أساسية من هذه المخطوطة. يجب أن تكون الاستجابة كاملة باللغة العربية. يجب أن تتضمن كل بديهية مصطلحاً عميقاً، تعريفاً أكاديمياً، وأهميتها الشاملة.`
