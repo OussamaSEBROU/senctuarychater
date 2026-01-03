@@ -9,6 +9,55 @@ import { Message, PDFData, Language } from '../types';
 import { chatWithManuscript } from '../services/geminiService';
 import { translations } from '../translations';
 
+// مكوّن فرعي لعرض النص بتأثير الكتابة
+const TypewriterText: React.FC<{ text: string; speed?: number }> = ({ text, speed = 15 }) => {
+  const [displayedText, setDisplayedText] = useState('');
+  const [isComplete, setIsComplete] = useState(false);
+
+  useEffect(() => {
+    let i = 0;
+    const words = text.split(' ');
+    setDisplayedText('');
+    setIsComplete(false);
+
+    const timer = setInterval(() => {
+      if (i < words.length) {
+        setDisplayedText((prev) => prev + (prev ? ' ' : '') + words[i]);
+        i++;
+      } else {
+        clearInterval(timer);
+        setIsComplete(true);
+      }
+    }, speed);
+
+    return () => clearInterval(timer);
+  }, [text, speed]);
+
+  return (
+    <div className={!isComplete ? 'after:content-["_▋"] after:animate-pulse' : ''}>
+      <ReactMarkdown
+        remarkPlugins={[remarkMath]}
+        rehypePlugins={[rehypeKatex]}
+        components={{
+          code({ node, inline, className, children, ...props }: any) {
+            const match = /language-(\w+)/.exec(className || '');
+            return !inline && match ? (
+              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
+                {String(children).replace(/\n$/, '')}
+              </SyntaxHighlighter>
+            ) : (
+              <code className="bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props}>{children}</code>
+            );
+          },
+          p({children}) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p> }
+        }}
+      >
+        {displayedText}
+      </ReactMarkdown>
+    </div>
+  );
+};
+
 interface ChatInterfaceProps {
   pdf: PDFData;
   lang: Language;
@@ -67,39 +116,45 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
         {messages.map((msg, i) => {
           const ar = isArabic(msg.content);
+          const isLastMessage = i === messages.length - 1 && msg.role === 'model';
+
           return (
             <div key={i} className={`flex w-full ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
               <div 
                 className={`flex gap-3 max-w-[95%] md:max-w-[85%] ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
                 dir={ar ? 'rtl' : 'ltr'}
               >
-                <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-[10px] font-black border ${msg.role === 'user' ? 'bg-indigo-600 border-indigo-500 shadow-lg shadow-indigo-900/20' : 'bg-[#a34a28] border-orange-950 shadow-lg shadow-orange-900/10'}`}>
+                <div className={`w-8 h-8 rounded-lg shrink-0 flex items-center justify-center text-[10px] font-black border ${msg.role === 'user' ? 'bg-indigo-600 border-indigo-500' : 'bg-[#a34a28] border-orange-900 shadow-lg shadow-orange-950/20'}`}>
                   {msg.role === 'user' ? 'U' : 'AI'}
                 </div>
                 
-                <div className={`rounded-2xl px-4 py-3 shadow-xl border ${
+                <div className={`rounded-2xl px-4 py-3 border ${
                   msg.role === 'user' ? 'bg-[#151515] border-white/5' : 'bg-[#0a0a0a] border-white/[0.03]'
                 }`}>
-                  <div className={`prose prose-invert prose-sm md:prose-base max-w-none ${ar ? 'text-right' : 'text-left'}`}>
-                    <ReactMarkdown
-                      remarkPlugins={[remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                      components={{
-                        code({ node, inline, className, children, ...props }: any) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          return !inline && match ? (
-                            <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
-                          ) : (
-                            <code className="bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props}>{children}</code>
-                          );
-                        },
-                        p({children}) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p> }
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
+                  <div className={`prose prose-invert prose-sm md:prose-base max-w-none ${ar ? 'text-right font-academic' : 'text-left'}`}>
+                    {isLastMessage ? (
+                      <TypewriterText text={msg.content} />
+                    ) : (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkMath]}
+                        rehypePlugins={[rehypeKatex]}
+                        components={{
+                          code({ node, inline, className, children, ...props }: any) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            return !inline && match ? (
+                              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            ) : (
+                              <code className="bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs" {...props}>{children}</code>
+                            );
+                          },
+                          p({children}) { return <p className="mb-2 last:mb-0 leading-relaxed">{children}</p> }
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                    )}
                   </div>
                 </div>
               </div>
@@ -126,9 +181,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
               placeholder={t.placeholder}
-              className={`w-full bg-transparent px-5 py-4 focus:outline-none text-white text-sm md:text-base resize-none ${lang === 'ar' ? 'text-right font-academic' : ''}`}
+              className={`w-full bg-transparent px-5 py-4 focus:outline-none text-white text-sm md:text-base resize-none ${lang === 'ar' ? 'text-right font-academic font-bold' : ''}`}
             />
-            <button type="submit" disabled={isLoading || !input.trim()} className="p-3 text-[#a34a28] hover:text-orange-400 transition-colors disabled:opacity-20">
+            <button type="submit" disabled={isLoading || !input.trim()} className="p-3 text-[#a34a28] hover:text-orange-600 transition-colors disabled:opacity-20">
               <div className="bg-orange-950/20 p-2 rounded-lg border border-orange-900/10">
                 <svg className={`w-6 h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9-7-9-7V19z" />
