@@ -6,15 +6,15 @@ import { translations } from "../translations";
 let chatSession: Chat | null = null;
 let currentPdfBase64: string | null = null;
 
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher. 
-Your tone is sophisticated, academic, and human-like (ChatGPT style).
+const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher with a focus on deep semantic analysis. 
+Your response style is similar to ChatGPT - engaging, structured, and narrative-driven. 
 
-CRITICAL INSTRUCTIONS:
-1. You have been provided with a PDF document.
-2. Analyze the context deeply before answering.
-3. ALWAYS respond in Arabic when the user asks in Arabic, or English if asked in English.
-4. Use professional formatting: **bold** for key terms, and LaTeX for any mathematical formulas.
-5. Provide comprehensive, flowing answers as if you are writing a scholarly commentary.`;
+CRITICAL PROTOCOLS:
+1. You are analyzing an uploaded PDF. Every answer must derive from its core logic or historical context.
+2. Structure your answers with clear sections, use **bold text** for emphasis, and LaTeX for technical formulas.
+3. Don't be dry; explain concepts like a world-class scholar lecturing a brilliant student.
+4. ALWAYS match the language of the user. If they ask in Arabic, respond in high-quality academic Arabic. 
+5. If the user asks for a summary or explanation, provide a flowing narrative that keeps them engaged.`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -27,7 +27,7 @@ const MODEL_NAME = "gemini-2.5-flash";
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   const ai = getGeminiClient();
   currentPdfBase64 = pdfBase64;
-  chatSession = null; // Reset session for new file
+  chatSession = null;
 
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
@@ -79,11 +79,10 @@ export const chatWithManuscript = async (
     });
 
     if (currentPdfBase64) {
-      // First hidden prompt to establish the PDF context in the session
       await chatSession.sendMessage({
         message: [
           { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "Document uploaded. Focus all subsequent answers on this text." }
+          { text: "The manuscript is uploaded. Please acknowledge and be ready for detailed intellectual interrogation." }
         ]
       });
     }
