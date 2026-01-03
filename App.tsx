@@ -28,10 +28,14 @@ const App: React.FC = () => {
     setFlowStep('axioms');
     try {
       const extracted = await extractAxioms(base64, lang);
-      setAxioms(extracted);
+      if (extracted && extracted.length > 0) {
+        setAxioms(extracted);
+      } else {
+        throw new Error("Empty axioms");
+      }
     } catch (err) {
       console.error(err);
-      setError(lang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.");
+      setError(lang === 'ar' ? "فشل التحليل العصبي للمخطوط. يرجى المحاولة مرة أخرى." : "Synthesis failed. Please try again.");
     } finally {
       setIsSynthesizing(false);
     }
@@ -64,7 +68,7 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center">
           <div className="spinner-arc mb-12"></div>
           <h2 className="text-white text-lg font-black tracking-[0.4em] mb-10 uppercase">{t.synthesis}</h2>
-          <p className={`italic max-w-md ${lang === 'ar' ? 'text-sm' : 'text-xs opacity-60'}`}>{t.covenant}</p>
+          <p className={`italic max-w-md leading-relaxed ${lang === 'ar' ? 'text-sm' : 'text-xs opacity-60'}`}>{t.covenant}</p>
         </div>
       )}
 
@@ -93,7 +97,6 @@ const App: React.FC = () => {
 
       <main className="flex-1 overflow-hidden relative z-10">
         {!pdf ? (
-          /* الواجهة الأولى تبقى بالإنجليزية دائماً كما هو مطلوب */
           <div className="h-full flex flex-col items-center justify-center p-6 text-center" dir="ltr">
             <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
               {translations.en.sanctuary}
@@ -118,15 +121,21 @@ const App: React.FC = () => {
           <div className="h-full flex flex-col">
             {flowStep === 'axioms' && (
               <div className="h-full flex flex-col items-center justify-center p-4">
-                 <h3 className="text-2xl md:text-5xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
+                 <h3 className="text-2xl md:text-4xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
                  <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10">
-                    {axioms.map((ax, i) => (
+                    {axioms.length > 0 ? axioms.map((ax, i) => (
                       <div key={i} className="min-w-[280px] md:min-w-[400px] snap-center">
                         <AxiomCard axiom={ax} index={i} />
                       </div>
-                    ))}
+                    )) : (
+                      <div className="w-full py-20 text-center opacity-20 italic">Extracting Wisdom...</div>
+                    )}
                  </div>
-                 <button onClick={() => setFlowStep('chat')} className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)]">
+                 <button 
+                  onClick={() => setFlowStep('chat')} 
+                  disabled={axioms.length === 0}
+                  className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)] disabled:opacity-30"
+                 >
                    {t.deepChatBtn}
                  </button>
               </div>
