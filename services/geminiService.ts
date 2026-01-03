@@ -22,12 +22,13 @@ export const getGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-const MODEL_NAME = "gemini-2.5-flash";
+// استخدام Gemini 3 Flash لسرعة استجابة فائقة وقدرة معالجة PDF متطورة
+const MODEL_NAME ="gemini-2.5-flash";
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   const ai = getGeminiClient();
   currentPdfBase64 = pdfBase64;
-  chatSession = null;
+  chatSession = null; // إعادة ضبط الجلسة عند رفع ملف جديد
 
   const response = await ai.models.generateContent({
     model: MODEL_NAME,
@@ -70,31 +71,37 @@ export const chatWithManuscriptStream = async (
 ): Promise<void> => {
   const ai = getGeminiClient();
 
-  if (!chatSession) {
-    chatSession = ai.chats.create({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        temperature: 0.8,
-      },
-    });
-
-    if (currentPdfBase64) {
-      await chatSession.sendMessage({
-        message: [
-          { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "The manuscript is uploaded. Focus on speed and precision." }
-        ]
+  try {
+    if (!chatSession) {
+      chatSession = ai.chats.create({
+        model: MODEL_NAME,
+        config: {
+          systemInstruction: getSystemInstruction(lang),
+          temperature: 0.7,
+        },
       });
-    }
-  }
 
-  const result = await chatSession.sendMessageStream({ message: userPrompt });
-  
-  for await (const chunk of result) {
-    const chunkText = (chunk as GenerateContentResponse).text;
-    if (chunkText) {
-      onChunk(chunkText);
+      // إرسال الملف في أول رسالة لربط السياق
+      if (currentPdfBase64) {
+        await chatSession.sendMessage({
+          message: [
+            { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
+            { text: "This is the manuscript we will discuss. Acknowledge its presence briefly then focus on my future queries." }
+          ]
+        });
+      }
     }
+
+    const result = await chatSession.sendMessageStream({ message: userPrompt });
+    
+    for await (const chunk of result) {
+      const chunkText = (chunk as GenerateContentResponse).text;
+      if (chunkText) {
+        onChunk(chunkText);
+      }
+    }
+  } catch (error) {
+    chatSession = null; // تنظيف الجلسة في حال حدوث خطأ للسماح بإعادة المحاولة
+    throw error;
   }
 };
