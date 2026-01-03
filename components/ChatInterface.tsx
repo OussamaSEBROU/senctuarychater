@@ -62,29 +62,29 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ pdf, lang }) => {
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
       <div 
         ref={scrollRef} 
-        className="flex-1 overflow-y-auto px-4 md:px-10 pt-8 pb-44 scrollbar-none"
+        className="flex-1 overflow-y-auto px-3 md:px-10 pt-4 md:pt-8 pb-40 md:pb-44 scrollbar-none"
       >
         {messages.length === 0 && (
           <div className="h-full flex flex-col items-center justify-center opacity-30 text-center py-20">
-            <h3 className="text-xl font-black uppercase tracking-widest text-white mb-2">{t.dialogue}</h3>
-            <p className="text-xs max-w-xs leading-relaxed">{t.dialogueDesc}</p>
+            <h3 className="text-lg md:text-xl font-black uppercase tracking-widest text-white mb-2">{t.dialogue}</h3>
+            <p className="text-[10px] md:text-xs max-w-xs leading-relaxed px-6">{t.dialogueDesc}</p>
           </div>
         )}
 
         {messages.map((msg, i) => {
           const ar = isArabic(msg.content);
           return (
-            <div key={i} className={`flex w-full mb-10 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
+            <div key={i} className={`flex w-full mb-6 md:mb-10 ${msg.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2`}>
               <div 
-                className={`flex gap-4 max-w-[92%] md:max-w-[85%] ${msg.role === 'user' ? (lang === 'ar' ? 'flex-row' : 'flex-row-reverse') : (lang === 'ar' ? 'flex-row-reverse' : 'flex-row')}`}
+                className={`flex gap-3 md:gap-4 w-full md:max-w-[85%] ${msg.role === 'user' ? (lang === 'ar' ? 'flex-row' : 'flex-row-reverse') : (lang === 'ar' ? 'flex-row-reverse' : 'flex-row')}`}
                 dir={ar ? 'rtl' : 'ltr'}
               >
-                <div className={`w-9 h-9 rounded-xl shrink-0 flex items-center justify-center text-[11px] font-black border ${msg.role === 'user' ? 'bg-indigo-600 border-indigo-500 shadow-lg' : 'bg-white/5 border-white/10'}`}>
+                <div className={`w-8 h-8 md:w-9 md:h-9 rounded-lg md:rounded-xl shrink-0 flex items-center justify-center text-[10px] font-black border ${msg.role === 'user' ? 'bg-indigo-600 border-indigo-500 shadow-lg' : 'bg-white/5 border-white/10'}`}>
                   {msg.role === 'user' ? 'U' : 'AI'}
                 </div>
                 
                 <div className="flex flex-col flex-1 min-w-0">
-                  <div className={`rounded-2xl px-6 py-4 shadow-2xl border ${
+                  <div className={`rounded-2xl px-4 md:px-6 py-3 md:py-4 shadow-2xl border ${
                     msg.role === 'user' 
                       ? 'bg-[#151515] text-white border-white/5' 
                       : 'bg-[#0a0a0a] text-white/90 border-white/[0.03]'
@@ -95,7 +95,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ pdf, lang }) => {
                         rehypePlugins={[rehypeKatex]}
                         components={{
                           h3({ children }) {
-                            return <h3 className={`text-indigo-400 font-black mt-6 mb-3 ${ar ? 'border-r-4 pr-4' : 'border-l-4 pl-4'} border-indigo-500`}>{children}</h3>
+                            return <h3 className={`text-indigo-400 font-black mt-4 mb-2 md:mt-6 md:mb-3 ${ar ? 'border-r-4 pr-3 md:pr-4' : 'border-l-4 pl-3 md:pl-4'} border-indigo-500`}>{children}</h3>
+                          },
+                          p({ children }) {
+                            return <p className="leading-relaxed mb-3 md:mb-4">{children}</p>
                           },
                           code({ node, inline, className, children, ...props }: any) {
                             const match = /language-(\w+)/.exec(className || '');
@@ -105,8 +108,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ pdf, lang }) => {
                             return !inline && match ? (
                               <div className="relative my-4 rounded-xl overflow-hidden border border-white/10" dir="ltr">
                                 <div className="flex items-center justify-between px-4 py-2 bg-white/5 border-b border-white/5">
-                                  <span className="text-[10px] font-bold text-white/30 uppercase">{match[1]}</span>
-                                  <button onClick={() => handleCopy(codeStr, id)} className="text-white/40 hover:text-white">
+                                  <span className="text-[9px] font-bold text-white/30 uppercase">{match[1]}</span>
+                                  <button onClick={() => handleCopy(codeStr, id)} className="text-[9px] text-white/40 hover:text-white uppercase font-black">
                                     {copiedId === id ? "Copied!" : "Copy"}
                                   </button>
                                 </div>
@@ -115,7 +118,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ pdf, lang }) => {
                                 </SyntaxHighlighter>
                               </div>
                             ) : (
-                              <code className={`${className} bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono`} {...props}>
+                              <code className={`${className} bg-white/10 px-1.5 py-0.5 rounded text-indigo-300 font-mono text-xs`} {...props}>
                                 {children}
                               </code>
                             );
@@ -143,10 +146,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ pdf, lang }) => {
         )}
       </div>
 
-      <div className="absolute bottom-0 left-0 right-0 p-6 md:pb-12 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent z-20">
-        <div className="max-w-3xl mx-auto">
+      <div className="absolute bottom-0 left-0 right-0 p-3 md:p-6 pb-6 md:pb-12 bg-gradient-to-t from-[#050505] via-[#050505] to-transparent z-20">
+        <div className="max-w-4xl mx-auto">
           <form onSubmit={handleSubmit} className="relative">
-            <div className="relative flex items-center bg-[#111111]/80 backdrop-blur-xl border border-white/10 rounded-2xl overflow-hidden min-h-[60px]">
+            <div className="relative flex items-center bg-[#111111]/90 backdrop-blur-2xl border border-white/10 rounded-xl md:rounded-2xl overflow-hidden min-h-[54px] md:min-h-[60px] shadow-2xl">
               <textarea
                 rows={1}
                 value={input}
@@ -158,16 +161,18 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ pdf, lang }) => {
                   }
                 }}
                 placeholder={t.placeholder}
-                className={`w-full bg-transparent px-6 py-5 focus:outline-none text-white placeholder:text-white/10 resize-none ${lang === 'ar' ? 'text-right' : ''}`}
+                className={`w-full bg-transparent px-5 md:px-6 py-4 focus:outline-none text-white text-sm md:text-base placeholder:text-white/10 resize-none ${lang === 'ar' ? 'text-right' : ''}`}
               />
               <button 
                 type="submit"
                 disabled={isLoading || !input.trim()}
-                className={`absolute ${lang === 'ar' ? 'left-3' : 'right-3'} p-2.5 text-indigo-400 hover:text-white transition-all`}
+                className={`absolute ${lang === 'ar' ? 'left-2' : 'right-2'} p-2 text-indigo-400 hover:text-white transition-all disabled:opacity-20`}
               >
-                <svg className={`w-6 h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9-7-9-7V19z" />
-                </svg>
+                <div className="bg-indigo-500/10 p-2 rounded-lg">
+                  <svg className={`w-5 h-5 md:w-6 h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 19l9-7-9-7V19z" />
+                  </svg>
+                </div>
               </button>
             </div>
           </form>
