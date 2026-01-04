@@ -28,66 +28,70 @@ export const getGeminiClient = () => {
 const MODEL_NAME = "gemini-2.5-flash";
 
 /**
- * يتم استدعاء هذه الدالة عند رفع الملف.
- * تقوم باستخراج الـ Axioms وفي نفس الوقت تهيئة جلسة الدردشة بالملف.
+ * استخراج الـ Axioms وتهيئة الجلسة بشكل متوازٍ (Parallel) لتحقيق أقصى سرعة.
  */
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
-    
-    // حفظ الملف وتصفير الجلسة القديمة
     currentPdfBase64 = pdfBase64;
     chatSession = null;
 
-    // 1. استخراج الـ Axioms (المعالجة الأساسية)
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: translations[lang].extractionPrompt(lang) },
-        ],
-      },
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              term: { type: Type.STRING },
-              definition: { type: Type.STRING },
-              significance: { type: Type.STRING }
+    // تشغيل العمليتين في نفس الوقت لتقليل وقت الانتظار للنصف
+    const [extractionResponse, sessionInit] = await Promise.all([
+      // العملية 1: استخراج الـ Axioms
+      ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: {
+          parts: [
+            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+            { text: translations[lang].extractionPrompt(lang) },
+          ],
+        },
+        config: {
+          systemInstruction: getSystemInstruction(lang),
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                term: { type: Type.STRING },
+                definition: { type: Type.STRING },
+                significance: { type: Type.STRING }
+              },
+              required: ["term", "definition", "significance"],
             },
-            required: ["term", "definition", "significance"],
           },
         },
-      },
-    });
+      }),
+      
+      // العملية 2: تهيئة جلسة الدردشة بالملف
+      (async () => {
+        const session = ai.chats.create({
+          model: MODEL_NAME,
+          config: {
+            systemInstruction: getSystemInstruction(lang),
+            temperature: 0.7,
+          },
+        });
+        await session.sendMessage({
+          message: [
+            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+            { text: "System: Manuscript uploaded. Analyze and wait for user questions." }
+          ]
+        });
+        return session;
+      })()
+    ]);
 
-    if (!response.text) {
+    if (!extractionResponse.text) {
       throw new Error("EMPTY_RESPONSE");
     }
 
-    // 2. تهيئة جلسة الدردشة فوراً بالملف ليكون جاهزاً للأسئلة اللاحقة
-    chatSession = ai.chats.create({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        temperature: 0.7,
-      },
-    });
-
-    // تصحيح هيكلية sendMessage لتتوافق مع TypeScript
-    await chatSession.sendMessage({
-      message: [
-        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-        { text: "System: The user has uploaded this manuscript. Analyze it thoroughly. Do not respond to this message, just acknowledge internally and wait for user questions." }
-      ]
-    });
+    // حفظ الجلسة الجاهزة
+    chatSession = sessionInit;
     
-    return JSON.parse(response.text);
+    return JSON.parse(extractionResponse.text);
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
     throw error;
@@ -95,7 +99,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
 };
 
 /**
- * الدردشة الآن تعتمد كلياً على الجلسة المهيأة مسبقاً.
+ * الدردشة تعتمد على الجلسة التي تم تجهيزها مسبقاً في مرحلة الرفع.
  */
 export const chatWithManuscriptStream = async (
   userPrompt: string,
@@ -105,6 +109,7 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
+    // إعادة التهيئة فقط في حال فقدان الجلسة
     if (!chatSession) {
       chatSession = ai.chats.create({
         model: MODEL_NAME,
@@ -115,7 +120,6 @@ export const chatWithManuscriptStream = async (
       });
 
       if (currentPdfBase64) {
-        // تصحيح هيكلية sendMessage لتتوافق مع TypeScript
         await chatSession.sendMessage({
           message: [
             { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
