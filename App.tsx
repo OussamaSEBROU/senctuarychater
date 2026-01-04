@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Axiom, PDFData, Language } from './types';
 import { extractAxioms } from './services/geminiService';
@@ -7,6 +6,8 @@ import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
 import ManuscriptViewer from './components/ManuscriptViewer';
 import { translations } from './translations';
+
+const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 const App: React.FC = () => {
   const [pdf, setPdf] = useState<PDFData | null>(null);
@@ -66,19 +67,32 @@ const App: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    
     if (file.type !== 'application/pdf') {
       setError(lang === 'ar' ? "يرجى رفع ملف PDF فقط." : "Please upload a PDF file only.");
       return;
     }
+
+    if (file.size > MAX_FILE_SIZE) {
+      setError(lang === 'ar' ? "حجم الملف كبير جداً. الحد الأقصى 20 ميجابايت." : "File too large. Maximum size is 20MB.");
+      return;
+    }
     
-    const reader = new FileReader();
-    reader.onload = async () => {
-      const result = reader.result as string;
-      const base64 = result.substring(result.indexOf(',') + 1);
-      setPdf({ base64, name: file.name });
-      handleSynthesis(base64);
-    };
-    reader.readAsDataURL(file);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const result = reader.result as string;
+        const base64 = result.substring(result.indexOf(',') + 1);
+        setPdf({ base64, name: file.name });
+        await handleSynthesis(base64);
+      };
+      reader.onerror = () => {
+        setError(lang === 'ar' ? "فشل قراءة الملف." : "Failed to read file.");
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      setError(lang === 'ar' ? "خطأ في معالجة الملف." : "Error processing file.");
+    }
   };
 
   const handleNewChat = () => {
