@@ -1,15 +1,16 @@
+
 import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
 import { Axiom, Language } from "../types";
 import { translations } from "../translations";
 
 let chatSession: Chat | null = null;
-let extractedText: string | null = null;
+let currentPdfBase64: string | null = null;
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher with a focus on deep semantic analysis. 
 Your response style is engaging, structured, and narrative-driven. 
 
 CRITICAL PROTOCOLS:
-1. You are analyzing a manuscript text that has been pre-extracted. Every answer must derive from this text's core logic or historical context.
+1. You are analyzing an uploaded PDF. Every answer must derive from its core logic or historical context.
 2. Structure your answers with clear sections, use **bold text** for emphasis, and LaTeX for technical formulas.
 3. Don't be dry; explain concepts like a world-class scholar lecturing a brilliant student.
 4. ALWAYS match the language of the user. If they ask in Arabic, respond in high-quality academic Arabic. 
@@ -26,35 +27,25 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash";
 
+/**
+ * يتم استدعاء هذه الدالة عند رفع الملف.
+ * تقوم باستخراج الـ Axioms وفي نفس الوقت تهيئة جلسة الدردشة بالملف.
+ */
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
+    
+    // حفظ الملف وتصفير الجلسة القديمة
+    currentPdfBase64 = pdfBase64;
     chatSession = null;
-    extractedText = null;
 
-    // Step 1: Extract text from PDF
-    const extractionResponse = await ai.models.generateContent({
+    // 1. استخراج الـ Axioms (المعالجة الأساسية)
+    const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
         parts: [
           { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: "Extract ALL text content from this PDF document. Return ONLY the extracted text, nothing else." },
-        ],
-      },
-    });
-
-    if (!extractionResponse.text) {
-      throw new Error("FAILED_TEXT_EXTRACTION");
-    }
-
-    extractedText = extractionResponse.text;
-
-    // Step 2: Generate axioms from extracted text
-    const axiomsResponse = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { text: `Manuscript Text:\n\n${extractedText}\n\n${translations[lang].extractionPrompt(lang)}` },
+          { text: translations[lang].extractionPrompt(lang) },
         ],
       },
       config: {
@@ -75,18 +66,38 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
       },
     });
 
-    if (!axiomsResponse.text) {
+    if (!response.text) {
       throw new Error("EMPTY_RESPONSE");
     }
 
-    return JSON.parse(axiomsResponse.text);
+    // 2. تهيئة جلسة الدردشة فوراً بالملف ليكون جاهزاً للأسئلة اللاحقة
+    // نستخدم sendMessage لتعريف الملف في سياق الجلسة
+    chatSession = ai.chats.create({
+      model: MODEL_NAME,
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        temperature: 0.7,
+      },
+    });
+
+    // إرسال الملف كخلفية للجلسة (Background Context)
+    // لا ننتظر الرد هنا لضمان سرعة واجهة المستخدم، أو يمكن انتظاره لضمان الجاهزية
+    await chatSession.sendMessage([
+      { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+      { text: "System: The user has uploaded this manuscript. Analyze it thoroughly. Do not respond to this message, just acknowledge internally and wait for user questions." }
+    ]);
+    
+    return JSON.parse(response.text);
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
-    extractedText = null;
     throw error;
   }
 };
 
+/**
+ * الدردشة الآن تعتمد كلياً على الجلسة المهيأة مسبقاً.
+ * لا يتم إرسال الملف هنا نهائياً.
+ */
 export const chatWithManuscriptStream = async (
   userPrompt: string,
   lang: Language,
@@ -95,10 +106,7 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
-    if (!extractedText) {
-      throw new Error("NO_EXTRACTED_TEXT");
-    }
-
+    // إذا لم تكن الجلسة موجودة (حالة نادرة)، نقوم بإنشائها
     if (!chatSession) {
       chatSession = ai.chats.create({
         model: MODEL_NAME,
@@ -108,12 +116,15 @@ export const chatWithManuscriptStream = async (
         },
       });
 
-      // Send extracted text once as context
-      await chatSession.sendMessage({
-        message: `Here is the complete manuscript text for our discussion:\n\n${extractedText}\n\nI'm ready for your questions about this text.`
-      });
+      if (currentPdfBase64) {
+        await chatSession.sendMessage([
+          { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
+          { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
+        ]);
+      }
     }
 
+    // إرسال السؤال فقط بدون الملف
     const result = await chatSession.sendMessageStream({ message: userPrompt });
     
     for await (const chunk of result) {
@@ -124,7 +135,8 @@ export const chatWithManuscriptStream = async (
     }
   } catch (error: any) {
     console.error("Stream error in geminiService:", error);
-    chatSession = null;
+    // في حال حدوث خطأ في الجلسة، نصفرها لإعادة التهيئة في المحاولة القادمة
+    chatSession = null; 
     throw error;
   }
 };
