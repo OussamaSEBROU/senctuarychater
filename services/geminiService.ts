@@ -1,10 +1,10 @@
-
 import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
 import { Axiom, Language } from "../types";
 import { translations } from "../translations";
 
 let chatSession: Chat | null = null;
 let currentPdfBase64: string | null = null;
+let isPdfContextSet: boolean = false;
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher with a focus on deep semantic analysis. 
 Your response style is engaging, structured, and narrative-driven. 
@@ -25,14 +25,14 @@ export const getGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-// استخدام موديل مستقر وفعال لمعالجة المستندات
 const MODEL_NAME = "gemini-2.5-flash";
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
     currentPdfBase64 = pdfBase64;
-    chatSession = null; 
+    chatSession = null;
+    isPdfContextSet = false;
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -67,7 +67,6 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     return JSON.parse(response.text);
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
-    // إعادة رمي الخطأ ليتم معالجته في App.tsx مع تفاصيل أكثر
     throw error;
   }
 };
@@ -88,16 +87,16 @@ export const chatWithManuscriptStream = async (
           temperature: 0.7,
         },
       });
+    }
 
-      if (currentPdfBase64) {
-        // نرسل الملف في سياق المحادثة لضمان بقاء النموذج متصلاً بالمخطوط
-        await chatSession.sendMessage({
-          message: [
-            { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
-          ]
-        });
-      }
+    if (currentPdfBase64 && !isPdfContextSet) {
+      await chatSession.sendMessage({
+        message: [
+          { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
+          { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
+        ]
+      });
+      isPdfContextSet = true;
     }
 
     const result = await chatSession.sendMessageStream({ message: userPrompt });
@@ -110,7 +109,8 @@ export const chatWithManuscriptStream = async (
     }
   } catch (error: any) {
     console.error("Stream error in geminiService:", error);
-    chatSession = null; 
+    chatSession = null;
+    isPdfContextSet = false;
     throw error;
   }
 };
