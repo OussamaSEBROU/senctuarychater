@@ -71,7 +71,6 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     }
 
     // 2. تهيئة جلسة الدردشة فوراً بالملف ليكون جاهزاً للأسئلة اللاحقة
-    // نستخدم sendMessage لتعريف الملف في سياق الجلسة
     chatSession = ai.chats.create({
       model: MODEL_NAME,
       config: {
@@ -80,12 +79,13 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
       },
     });
 
-    // إرسال الملف كخلفية للجلسة (Background Context)
-    // لا ننتظر الرد هنا لضمان سرعة واجهة المستخدم، أو يمكن انتظاره لضمان الجاهزية
-    await chatSession.sendMessage([
-      { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-      { text: "System: The user has uploaded this manuscript. Analyze it thoroughly. Do not respond to this message, just acknowledge internally and wait for user questions." }
-    ]);
+    // تصحيح هيكلية sendMessage لتتوافق مع TypeScript
+    await chatSession.sendMessage({
+      message: [
+        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+        { text: "System: The user has uploaded this manuscript. Analyze it thoroughly. Do not respond to this message, just acknowledge internally and wait for user questions." }
+      ]
+    });
     
     return JSON.parse(response.text);
   } catch (error: any) {
@@ -96,7 +96,6 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
 
 /**
  * الدردشة الآن تعتمد كلياً على الجلسة المهيأة مسبقاً.
- * لا يتم إرسال الملف هنا نهائياً.
  */
 export const chatWithManuscriptStream = async (
   userPrompt: string,
@@ -106,7 +105,6 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
-    // إذا لم تكن الجلسة موجودة (حالة نادرة)، نقوم بإنشائها
     if (!chatSession) {
       chatSession = ai.chats.create({
         model: MODEL_NAME,
@@ -117,14 +115,16 @@ export const chatWithManuscriptStream = async (
       });
 
       if (currentPdfBase64) {
-        await chatSession.sendMessage([
-          { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-          { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
-        ]);
+        // تصحيح هيكلية sendMessage لتتوافق مع TypeScript
+        await chatSession.sendMessage({
+          message: [
+            { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
+            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions." }
+          ]
+        });
       }
     }
 
-    // إرسال السؤال فقط بدون الملف
     const result = await chatSession.sendMessageStream({ message: userPrompt });
     
     for await (const chunk of result) {
@@ -135,7 +135,6 @@ export const chatWithManuscriptStream = async (
     }
   } catch (error: any) {
     console.error("Stream error in geminiService:", error);
-    // في حال حدوث خطأ في الجلسة، نصفرها لإعادة التهيئة في المحاولة القادمة
     chatSession = null; 
     throw error;
   }
