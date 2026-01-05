@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { Axiom, PDFData, Language } from './types';
 import { extractAxioms } from './services/geminiService';
@@ -6,8 +7,6 @@ import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
 import ManuscriptViewer from './components/ManuscriptViewer';
 import { translations } from './translations';
-
-const MAX_FILE_SIZE = 20 * 1024 * 1024; // 20MB
 
 const App: React.FC = () => {
   const [pdf, setPdf] = useState<PDFData | null>(null);
@@ -29,14 +28,15 @@ const App: React.FC = () => {
     }
   }, [axioms]);
 
-  const handleSynthesis = async (base64: string) => {
+  const handleSynthesis = async (base64: string, currentLang: Language) => {
     setIsSynthesizing(true);
     setError(null);
     setAxioms([]);
     setFlowStep('axioms');
 
     try {
-      const extracted = await extractAxioms(base64, lang);
+      // نمرر اللغة المختارة لضمان استخراج الفلاش كارد باللغة الصحيحة
+      const extracted = await extractAxioms(base64, currentLang);
       if (extracted && extracted.length > 0) {
         setAxioms(extracted);
       } else {
@@ -44,19 +44,10 @@ const App: React.FC = () => {
       }
     } catch (err: any) {
       console.error("Full synthesis error object:", err);
-      
-      let errorMsg = lang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.";
-      
+      let errorMsg = currentLang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.";
       if (err.message === "API_KEY_MISSING") {
-        errorMsg = lang === 'ar' ? "خطأ: مفتاح API غير متوفر في بيئة العمل." : "Error: API Key is missing in Render environment.";
-      } else if (err.status === 429) {
-        errorMsg = lang === 'ar' ? "تم تجاوز معدل الطلبات المسموح به." : "Rate limit exceeded. Please wait a moment.";
-      } else if (err.message?.includes("Safety")) {
-        errorMsg = lang === 'ar' ? "تم حظر المحتوى لأسباب تتعلق بالسلامة." : "Content blocked due to safety filters.";
-      } else {
-        errorMsg += lang === 'ar' ? " يرجى التأكد من جودة الملف أو مفتاح الـ API." : " Please check PDF quality or API configuration.";
+        errorMsg = currentLang === 'ar' ? "خطأ: مفتاح API غير متوفر." : "Error: API Key is missing.";
       }
-      
       setError(errorMsg);
       setPdf(null);
     } finally {
@@ -67,32 +58,19 @@ const App: React.FC = () => {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    
     if (file.type !== 'application/pdf') {
       setError(lang === 'ar' ? "يرجى رفع ملف PDF فقط." : "Please upload a PDF file only.");
       return;
     }
-
-    if (file.size > MAX_FILE_SIZE) {
-      setError(lang === 'ar' ? "حجم الملف كبير جداً. الحد الأقصى 20 ميجابايت." : "File too large. Maximum size is 20MB.");
-      return;
-    }
     
-    try {
-      const reader = new FileReader();
-      reader.onload = async () => {
-        const result = reader.result as string;
-        const base64 = result.substring(result.indexOf(',') + 1);
-        setPdf({ base64, name: file.name });
-        await handleSynthesis(base64);
-      };
-      reader.onerror = () => {
-        setError(lang === 'ar' ? "فشل قراءة الملف." : "Failed to read file.");
-      };
-      reader.readAsDataURL(file);
-    } catch (err) {
-      setError(lang === 'ar' ? "خطأ في معالجة الملف." : "Error processing file.");
-    }
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const result = reader.result as string;
+      const base64 = result.substring(result.indexOf(',') + 1);
+      setPdf({ base64, name: file.name });
+      handleSynthesis(base64, lang);
+    };
+    reader.readAsDataURL(file);
   };
 
   const handleNewChat = () => {
@@ -104,7 +82,7 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+    <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white overflow-hidden ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       {isSynthesizing && (
         <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
           <div className="spinner-arc mb-12"></div>
@@ -140,9 +118,9 @@ const App: React.FC = () => {
         )}
       </header>
 
-      <main className="flex-1 overflow-hidden relative z-10">
+      <main className="flex-1 overflow-hidden relative z-10 flex flex-col">
         {!pdf ? (
-          <div className="h-full flex flex-col items-center justify-center p-6 text-center" dir="ltr">
+          <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 text-center touch-auto" dir="ltr">
             <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
               {translations.en.sanctuary}
             </h2>
@@ -169,12 +147,12 @@ const App: React.FC = () => {
             )}
           </div>
         ) : (
-          <div className="h-full flex flex-col lg:flex-row relative">
-            <div className={`flex-1 flex flex-col transition-all duration-700 ease-in-out ${showViewer ? 'lg:w-1/2 opacity-100' : 'lg:w-full'}`}>
+          <div className="flex-1 flex flex-col lg:flex-row relative overflow-hidden">
+            <div className={`flex-1 flex flex-col transition-all duration-700 ease-in-out overflow-hidden ${showViewer ? 'lg:w-1/2 opacity-100' : 'lg:w-full'}`}>
               {flowStep === 'axioms' && (
-                <div className="h-full flex flex-col items-center justify-center p-4">
+                <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4 touch-auto">
                    <h3 className="text-2xl md:text-5xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
-                   <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10">
+                   <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10 touch-pan-x">
                       {axioms.length > 0 ? axioms.map((ax, i) => (
                         <div key={i} className="min-w-[280px] md:min-w-[400px] snap-center">
                           <AxiomCard axiom={ax} index={i} />
@@ -194,14 +172,14 @@ const App: React.FC = () => {
                 </div>
               )}
               {flowStep === 'chat' && (
-                <div className="h-full flex-1 bg-[#080808]">
+                <div className="flex-1 bg-[#080808] overflow-hidden">
                   <ChatInterface pdf={pdf} lang={lang} />
                 </div>
               )}
             </div>
 
             {showViewer && (
-              <div className={`fixed inset-0 lg:relative lg:inset-auto lg:w-1/2 bg-black z-[70] lg:z-10 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)]`}>
+              <div className={`fixed inset-0 lg:relative lg:inset-auto lg:w-1/2 bg-black z-[70] lg:z-10 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)] overflow-hidden`}>
                 <div className="flex lg:hidden items-center justify-between p-4 bg-[#1a1a1a] border-b border-white/10">
                    <h4 className="text-[10px] font-black tracking-widest uppercase text-white/40">{t.viewer}</h4>
                    <button onClick={() => setShowViewer(false)} className="p-2 bg-white/5 rounded-full text-white/60">
