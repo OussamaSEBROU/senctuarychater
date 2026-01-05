@@ -19,18 +19,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
-  // التمرير التلقائي للأسفل عند إضافة رسائل جديدة أو أثناء الـ Streaming
-  const scrollToBottom = () => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+  const handleAutoScroll = () => {
+    if (scrollRef.current) {
+      const { scrollHeight, clientHeight } = scrollRef.current;
+      scrollRef.current.scrollTo({
+        top: scrollHeight - clientHeight,
+        behavior: 'smooth'
+      });
     }
   };
 
   useEffect(() => {
-    scrollToBottom();
+    handleAutoScroll();
   }, [messages, isLoading]);
 
   const isArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
@@ -77,11 +79,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
-      {/* حاوية الرسائل مع دعم التمرير اليدوي الكامل واللمس */}
       <div 
         ref={scrollRef} 
-        className="flex-1 overflow-y-auto overflow-x-hidden pt-4 md:pt-6 pb-40 scroll-smooth touch-pan-y"
-        style={{ WebkitOverflowScrolling: 'touch' }} // تحسين التمرير في iOS
+        className="flex-1 overflow-y-auto overflow-x-hidden pt-4 md:pt-6 pb-40 touch-auto"
+        style={{ scrollBehavior: 'smooth' }}
       >
         <div className="max-w-5xl mx-auto w-full px-3 md:px-6 space-y-8">
           {messages.length === 0 && (
@@ -134,8 +135,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
               </div>
             );
           })}
-          {/* عنصر مرجعي للتمرير التلقائي */}
-          <div ref={messagesEndRef} className="h-4" />
         </div>
       </div>
 
@@ -169,9 +168,14 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
               </button>
             </div>
           </form>
-          <p className="mt-3 text-center text-[8px] md:text-[10px] text-white/10 uppercase tracking-widest font-black">
-            Powered by Gemini 3.0 • Real-Time Stream Logic
-          </p>
+          <div className="mt-3 text-center flex flex-col items-center gap-1">
+            <p className="text-[10px] md:text-xs text-white/30 uppercase tracking-[0.3em] font-black">
+              Powered by 5Min paper
+            </p>
+            <p className="text-[8px] text-white/10 uppercase tracking-widest font-bold">
+              by Oussama SEBROU
+            </p>
+          </div>
         </div>
       </div>
     </div>
