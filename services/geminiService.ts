@@ -50,63 +50,67 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash";
 
+/**
+ * استخراج الـ Axioms وتهيئة الجلسة.
+ * تم تعديلها لتكون أكثر استقراراً عبر إرسال الملف مرة واحدة لطلب الاستخراج،
+ * ثم استخدامه لتهيئة الجلسة، لتجنب أخطاء تجاوز الحجم أو ضغط الـ API.
+ */
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
     currentPdfBase64 = pdfBase64;
     chatSession = null;
 
-    const [extractionResponse, sessionInit] = await Promise.all([
-      ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: {
-          parts: [
-            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-            { text: translations[lang].extractionPrompt(lang) },
-          ],
-        },
-        config: {
-          systemInstruction: getSystemInstruction(lang),
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                term: { type: Type.STRING },
-                definition: { type: Type.STRING },
-                significance: { type: Type.STRING }
-              },
-              required: ["term", "definition", "significance"],
+    // 1. طلب استخراج الـ Axioms (هذا هو الطلب الأساسي والثقيل)
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [
+          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+          { text: translations[lang].extractionPrompt(lang) },
+        ],
+      },
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              term: { type: Type.STRING },
+              definition: { type: Type.STRING },
+              significance: { type: Type.STRING }
             },
+            required: ["term", "definition", "significance"],
           },
         },
-      }),
-      
-      (async () => {
-        const session = ai.chats.create({
-          model: MODEL_NAME,
-          config: {
-            systemInstruction: getSystemInstruction(lang),
-            temperature: 0.7,
-          },
-        });
-        await session.sendMessage({
-          message: [
-            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-            { text: "System: Manuscript uploaded. Analyze and wait for user questions. Remember: NO introductions in your future responses." }
-          ]
-        });
-        return session;
-      })()
-    ]);
+      },
+    });
 
-    if (!extractionResponse.text) {
+    if (!response.text) {
       throw new Error("EMPTY_RESPONSE");
     }
 
-    chatSession = sessionInit;
-    return JSON.parse(extractionResponse.text);
+    // 2. تهيئة جلسة الدردشة فوراً بعد نجاح الاستخراج
+    // نستخدم الملف لفتح الجلسة ليكون جاهزاً للدردشة
+    chatSession = ai.chats.create({
+      model: MODEL_NAME,
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        temperature: 0.7,
+      },
+    });
+
+    // إرسال الملف للجلسة في الخلفية (لا ننتظر الرد لضمان سرعة الواجهة)
+    chatSession.sendMessage({
+      message: [
+        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+        { text: "System: Manuscript uploaded. Analyze and wait for user questions. NO introductions." }
+      ]
+    }).catch(err => console.error("Background session init error:", err));
+    
+    return JSON.parse(response.text);
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
     throw error;
