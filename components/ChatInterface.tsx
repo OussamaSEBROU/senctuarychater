@@ -22,12 +22,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
-  // وظيفة التمرير التلقائي للأسفل
+  // التمرير التلقائي للأسفل عند إضافة رسائل جديدة أو أثناء الـ Streaming
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    if (messagesEndRef.current) {
+      messagesEndRef.current.scrollIntoView({ behavior: "smooth", block: "end" });
+    }
   };
 
-  // التمرير عند إضافة رسالة جديدة أو أثناء تدفق النص (Streaming)
   useEffect(() => {
     scrollToBottom();
   }, [messages, isLoading]);
@@ -75,10 +76,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   };
 
   return (
-    <div className="flex flex-col h-full bg-[#050505] relative">
+    <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
+      {/* حاوية الرسائل مع دعم التمرير اليدوي الكامل واللمس */}
       <div 
         ref={scrollRef} 
-        className="flex-1 overflow-y-auto pt-4 md:pt-6 pb-40 scrollbar-none"
+        className="flex-1 overflow-y-auto overflow-x-hidden pt-4 md:pt-6 pb-40 scroll-smooth touch-pan-y"
+        style={{ WebkitOverflowScrolling: 'touch' }} // تحسين التمرير في iOS
       >
         <div className="max-w-5xl mx-auto w-full px-3 md:px-6 space-y-8">
           {messages.length === 0 && (
@@ -132,7 +135,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
             );
           })}
           {/* عنصر مرجعي للتمرير التلقائي */}
-          <div ref={messagesEndRef} />
+          <div ref={messagesEndRef} className="h-4" />
         </div>
       </div>
 
