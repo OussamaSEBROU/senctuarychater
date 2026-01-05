@@ -82,7 +82,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       <div 
         ref={scrollRef} 
         className="flex-1 overflow-y-auto overflow-x-hidden pt-4 md:pt-6 pb-40 touch-auto"
-        style={{ scrollBehavior: 'smooth' }}
+        style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
       >
         <div className="max-w-5xl mx-auto w-full px-3 md:px-6 space-y-8">
           {messages.length === 0 && (
