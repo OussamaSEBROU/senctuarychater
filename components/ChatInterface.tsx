@@ -19,15 +19,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
+  // وظيفة التمرير التلقائي للأسفل
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  };
+
+  // التمرير عند إضافة رسالة جديدة أو أثناء تدفق النص (Streaming)
   useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTo({
-        top: scrollRef.current.scrollHeight,
-        behavior: 'smooth'
-      });
-    }
+    scrollToBottom();
   }, [messages, isLoading]);
 
   const isArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
@@ -39,7 +41,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
     const userText = input;
     const userMessage: Message = { role: 'user', content: userText };
     
-    // Add user message and a placeholder for AI response
     setMessages(prev => [...prev, userMessage, { role: 'model', content: '' }]);
     setInput('');
     setIsLoading(true);
@@ -130,6 +131,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
               </div>
             );
           })}
+          {/* عنصر مرجعي للتمرير التلقائي */}
+          <div ref={messagesEndRef} />
         </div>
       </div>
 
