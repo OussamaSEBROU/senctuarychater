@@ -20,12 +20,12 @@ export const translations = {
     helpText: "Upload a PDF manuscript to begin. The system will extract core axioms, which you can then explore through a deep neural dialogue.",
     placeholder: "Interrogate the author's logic...",
     deepChatBtn: "Deep Knowledge Chat",
-    extractionPrompt: (lang: string) => `Extract 6 core 'Knowledge Axioms' from this manuscript. The entire response must be in Arabic. Each axiom should include a profound term, a scholarly definition, and its overarching significance.`
+    extractionPrompt: (lang: string) => `Extract exactly 20 core 'Knowledge Axioms' from this manuscript. The entire response must be in English. Each axiom should include a profound term, a scholarly definition, and its overarching significance.`
   },
   ar: {
     title: "محراب المعرفة الذكي",
     sanctuary: "Sanctuary",
-    introText: "Neural extraction of axiomatic wisdom from deep manuscripts",
+    introText: "إن الإنسان في غاية الحاجة لمركزية \"منطق العمل\" كما هو في حاجة لمركزية \"منطق الفكرة\"",
     upload: "استحضار المخطوط",
     uploadDesc: "وثائق PDF فقط",
     newSanctuary: "محراب جديد",
@@ -42,6 +42,6 @@ export const translations = {
     helpText: "قم برفع المخطوط بصيغة PDF للبدء. سيقوم النظام باستخراج البديهيات الأساسية، والتي يمكنك استكشافها بعمق من خلال حوار معرفي.",
     placeholder: "استجوب منطق المؤلف وعمقه...",
     deepChatBtn: "الغوص في الحوار المعرفي",
-    extractionPrompt: (lang: string) => `استخرج 6 'بديهيات معرفية' أساسية من هذه المخطوطة. يجب أن تكون الاستجابة كاملة باللغة العربية. يجب أن تتضمن كل بديهية مصطلحاً عميقاً، تعريفاً أكاديمياً، وأهميتها الشاملة.`
+    extractionPrompt: (lang: string) => `استخرج بالضبط 20 'بديهية معرفية' أساسية من هذه المخطوطة. يجب أن تكون الاستجابة كاملة باللغة العربية. يجب أن تتضمن كل بديهية مصطلحاً عميقاً، تعريفاً أكاديمياً، وأهميتها الشاملة.`
   }
 };
