@@ -30,13 +30,13 @@ FORMATTING REQUIREMENTS (CRITICAL):
 - Use **Bold text** for central axiomatic concepts.
 - For mathematical or logical notation, you MUST use LaTeX. Wrap inline math in $...$ and display math blocks in $$...$$.
 - Use code blocks (\`\`\`language) for technical logic.
+- CRITICAL: If your response contains code blocks, ensure they are properly formatted. The UI will provide a copy icon for them.
+- CRITICAL: When providing quotes, ensure 100% accuracy and clearly attribute them to the correct author/speaker from the text.
 
 RESPONSE EXECUTION:
 - Your answers must MIRROR the author's intellectual depth.
-- Your answers must be always supported by precise citations and quotes from the manuscript.
-- Your response must strictly align with the author’s linguistic and grammatical fingerprint, mirroring their unique style, eloquence, mode of expression, sentence construction, and complex syntactic structures.
 - Your answers must be always in same language of the user question language.
-- Your answers must be super fast to answering.
+- Your answers must be super fast to answring.
 - Respond in formal, scholarly Arabic or academic English as requested.
 - Your tone is sophisticated, academic, and deeply analytical.
 - CRITICAL: Respond DIRECTLY to the question. NO introductions, NO greetings, NO pleasantries, NO "Certainly", NO "Here is the analysis". Start the content immediately.`;
@@ -52,67 +52,66 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash";
 
-/**
- * استخراج الـ Axioms وتهيئة الجلسة.
- * تم تعديلها لتكون أكثر استقراراً عبر إرسال الملف مرة واحدة لطلب الاستخراج،
- * ثم استخدامه لتهيئة الجلسة، لتجنب أخطاء تجاوز الحجم أو ضغط الـ API.
- */
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
     currentPdfBase64 = pdfBase64;
     chatSession = null;
 
-    // 1. طلب استخراج الـ Axioms (هذا هو الطلب الأساسي والثقيل)
-    const response = await ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: translations[lang].extractionPrompt(lang) },
-        ],
-      },
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              term: { type: Type.STRING },
-              definition: { type: Type.STRING },
-              significance: { type: Type.STRING }
+    // طلب استخراج 20 فلاش كارد (Axioms)
+    const extractionPrompt = `${translations[lang].extractionPrompt(lang)}. IMPORTANT: Extract exactly 20 high-quality axioms.`;
+
+    const [extractionResponse, sessionInit] = await Promise.all([
+      ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: {
+          parts: [
+            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+            { text: extractionPrompt },
+          ],
+        },
+        config: {
+          systemInstruction: getSystemInstruction(lang),
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.ARRAY,
+            items: {
+              type: Type.OBJECT,
+              properties: {
+                term: { type: Type.STRING },
+                definition: { type: Type.STRING },
+                significance: { type: Type.STRING }
+              },
+              required: ["term", "definition", "significance"],
             },
-            required: ["term", "definition", "significance"],
           },
         },
-      },
-    });
+      }),
+      
+      (async () => {
+        const session = ai.chats.create({
+          model: MODEL_NAME,
+          config: {
+            systemInstruction: getSystemInstruction(lang),
+            temperature: 0.7,
+          },
+        });
+        await session.sendMessage({
+          message: [
+            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+            { text: "System: Manuscript uploaded. Analyze and wait for user questions. NO introductions. Be super fast." }
+          ]
+        });
+        return session;
+      })()
+    ]);
 
-    if (!response.text) {
+    if (!extractionResponse.text) {
       throw new Error("EMPTY_RESPONSE");
     }
 
-    // 2. تهيئة جلسة الدردشة فوراً بعد نجاح الاستخراج
-    // نستخدم الملف لفتح الجلسة ليكون جاهزاً للدردشة
-    chatSession = ai.chats.create({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        temperature: 0.7,
-      },
-    });
-
-    // إرسال الملف للجلسة في الخلفية (لا ننتظر الرد لضمان سرعة الواجهة)
-    chatSession.sendMessage({
-      message: [
-        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-        { text: "System: Manuscript uploaded. Analyze and wait for user questions. NO introductions." }
-      ]
-    }).catch(err => console.error("Background session init error:", err));
-    
-    return JSON.parse(response.text);
+    chatSession = sessionInit;
+    return JSON.parse(extractionResponse.text);
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
     throw error;
@@ -140,7 +139,7 @@ export const chatWithManuscriptStream = async (
         await chatSession.sendMessage({
           message: [
             { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions. NO introductions." }
+            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions. NO introductions. Be super fast." }
           ]
         });
       }
