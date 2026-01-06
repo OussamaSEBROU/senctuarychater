@@ -58,26 +58,29 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     };
   }, [pdf.base64, lang]);
 
+  // مراقبة الصفحة الحالية عند التمرير
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
     const handleScroll = () => {
       const scrollLeft = container.scrollLeft;
-      const width = container.offsetWidth;
+      const width = container.clientWidth;
       const page = Math.round(scrollLeft / width) + 1;
-      if (page !== currentPage) setCurrentPage(page);
+      if (page !== currentPage && page > 0 && page <= numPages) {
+        setCurrentPage(page);
+      }
     };
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [currentPage]);
+  }, [currentPage, numPages]);
 
   const goToPage = (e: React.FormEvent) => {
     e.preventDefault();
     const pageNum = parseInt(jumpPage);
     if (pageNum > 0 && pageNum <= numPages && containerRef.current) {
-      const width = containerRef.current.offsetWidth;
+      const width = containerRef.current.clientWidth;
       containerRef.current.scrollTo({
         left: (pageNum - 1) * width,
         behavior: 'smooth'
@@ -87,28 +90,39 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
   };
 
   const handleZoom = (delta: number) => {
-    setZoom(prev => Math.min(Math.max(prev + delta, 0.5), 3.0));
+    setZoom(prev => {
+      const newZoom = Math.min(Math.max(prev + delta, 0.5), 3.0);
+      return parseFloat(newZoom.toFixed(1));
+    });
   };
 
   return (
     <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none">
-      {/* شريط الأدوات العلوي - تصميم أنيق ومضغوط */}
-      <div className="h-10 bg-black/90 border-b border-white/10 flex items-center justify-between px-4 z-30 shrink-0">
+      {/* شريط الأدوات العلوي */}
+      <div className="h-12 bg-black/90 border-b border-white/10 flex items-center justify-between px-4 z-30 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="text-[10px] font-medium text-white/40 truncate max-w-[120px] md:max-w-xs">
+          <span className="text-[10px] font-medium text-white/40 truncate max-w-[100px] md:max-w-xs">
             {pdf.name}
           </span>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3 md:gap-6">
           {/* أدوات الزوم */}
           <div className="flex items-center bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-            <button onClick={() => handleZoom(-0.2)} className="p-1.5 hover:bg-white/10 text-white/60 transition-colors">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg>
+            <button 
+              type="button"
+              onClick={() => handleZoom(-0.2)} 
+              className="p-2 hover:bg-white/10 text-white/60 active:text-orange-500 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg>
             </button>
-            <span className="text-[9px] font-mono text-white/40 px-2 min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => handleZoom(0.2)} className="p-1.5 hover:bg-white/10 text-white/60 transition-colors">
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
+            <span className="text-[10px] font-mono text-white/40 px-2 min-w-[45px] text-center">{Math.round(zoom * 100)}%</span>
+            <button 
+              type="button"
+              onClick={() => handleZoom(0.2)} 
+              className="p-2 hover:bg-white/10 text-white/60 active:text-orange-500 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
             </button>
           </div>
 
@@ -120,15 +134,15 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
                 value={jumpPage}
                 onChange={(e) => setJumpPage(e.target.value)}
                 placeholder={currentPage.toString()}
-                className="w-10 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white text-center focus:outline-none focus:border-orange-500/50 transition-colors"
+                className="w-12 bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-orange-500 transition-colors"
               />
-              <span className="text-[9px] text-white/20 uppercase font-black tracking-tighter">/ {numPages}</span>
+              <span className="text-[10px] text-white/20 uppercase font-black tracking-tighter">/ {numPages}</span>
             </form>
           )}
         </div>
       </div>
 
-      {/* منطقة عرض الصفحات - كامل الشاشة وبدون حواف */}
+      {/* منطقة عرض الصفحات */}
       <div 
         ref={containerRef} 
         className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center scrollbar-none scroll-smooth relative"
@@ -162,13 +176,15 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
+  const renderTaskRef = useRef<any>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
       ([entry]) => {
         if (entry.isIntersecting) {
           setIsVisible(true);
-          observer.disconnect();
+        } else {
+          setIsVisible(false);
         }
       },
       { threshold: 0.1, rootMargin: '0px 400px 0px 400px' }
@@ -182,8 +198,12 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
     
     const renderPage = async () => {
       try {
+        // إلغاء أي عملية رندر سابقة لنفس الصفحة لتجنب التعارض عند تغيير الزوم بسرعة
+        if (renderTaskRef.current) {
+          renderTaskRef.current.cancel();
+        }
+
         const page = await pdfDoc.getPage(pageNum);
-        // استخدام مقياس أعلى للوضوح مع مراعاة الزوم
         const viewport = page.getViewport({ scale: 2.0 * zoom });
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
@@ -192,18 +212,29 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
         canvas.height = viewport.height;
         canvas.width = viewport.width;
         
-        await page.render({ canvasContext: context, viewport }).promise;
+        const renderContext = { canvasContext: context, viewport };
+        renderTaskRef.current = page.render(renderContext);
+        
+        await renderTaskRef.current.promise;
         setIsRendered(true);
-      } catch (err) {
-        console.error(`Error rendering page ${pageNum}:`, err);
+      } catch (err: any) {
+        if (err.name !== 'RenderingCancelledException') {
+          console.error(`Error rendering page ${pageNum}:`, err);
+        }
       }
     };
     renderPage();
+
+    return () => {
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
+      }
+    };
   }, [isVisible, pdfDoc, pageNum, zoom]);
 
   return (
-    <div className="relative flex items-center justify-center min-h-full min-w-full p-0">
-      <div className="relative shadow-2xl bg-white">
+    <div className="relative flex items-center justify-center min-h-full min-w-full p-2 md:p-4">
+      <div className="relative shadow-2xl bg-white transition-transform duration-300">
         {!isRendered && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
              <div className="w-6 h-6 border-2 border-white/5 border-t-white/20 rounded-full animate-spin"></div>
@@ -214,9 +245,9 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
           className={`block object-contain transition-opacity duration-500 ${isRendered ? 'opacity-100' : 'opacity-0'}`}
           style={{ 
             width: 'auto', 
-            height: zoom > 1 ? 'auto' : '100vh',
+            height: zoom > 1.2 ? 'auto' : 'calc(100vh - 80px)',
             maxWidth: '100%',
-            maxHeight: zoom > 1 ? 'none' : '100vh'
+            maxHeight: zoom > 1.2 ? 'none' : 'calc(100vh - 80px)'
           }}
         />
       </div>
