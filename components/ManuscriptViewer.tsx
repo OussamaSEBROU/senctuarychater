@@ -14,6 +14,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [jumpPage, setJumpPage] = useState<string>('');
+  const [zoom, setZoom] = useState<number>(1.0);
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<any>(null);
   const t = translations[lang];
@@ -57,7 +58,6 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     };
   }, [pdf.base64, lang]);
 
-  // مراقبة الصفحة الحالية عند التمرير
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -86,78 +86,79 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     }
   };
 
+  const handleZoom = (delta: number) => {
+    setZoom(prev => Math.min(Math.max(prev + delta, 0.5), 3.0));
+  };
+
   return (
     <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none">
-      <div className="h-12 bg-black/90 border-b border-white/10 flex items-center justify-between px-6 z-30 shadow-2xl shrink-0">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 opacity-60">
-            <svg className="w-5 h-5 text-orange-500" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 0L2 5v14l10 5 10-5V5L12 0zm8 17.4l-8 4-8-4V6.6l8-4 8 4v10.8zM12 5.3L5.3 8.7 12 12l6.7-3.3L12 5.3z"/>
-            </svg>
-            <span className="text-[10px] font-black tracking-[0.2em] uppercase hidden md:block">Sanctuary Library</span>
-          </div>
-          <div className="h-4 w-[1px] bg-white/10 hidden md:block"></div>
-          <span className="text-[11px] font-medium text-white/50 truncate max-w-[150px] md:max-w-md">
+      {/* شريط الأدوات العلوي - تصميم أنيق ومضغوط */}
+      <div className="h-10 bg-black/90 border-b border-white/10 flex items-center justify-between px-4 z-30 shrink-0">
+        <div className="flex items-center gap-3">
+          <span className="text-[10px] font-medium text-white/40 truncate max-w-[120px] md:max-w-xs">
             {pdf.name}
           </span>
         </div>
         
-        {/* خاصية الانتقال لصفحة معينة */}
-        {!loading && !error && (
-          <form onSubmit={goToPage} className="flex items-center gap-2">
-            <input 
-              type="number" 
-              value={jumpPage}
-              onChange={(e) => setJumpPage(e.target.value)}
-              placeholder={currentPage.toString()}
-              className="w-12 bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-orange-500/50 transition-colors"
-            />
-            <span className="text-[10px] text-white/20 uppercase font-black tracking-tighter">/ {numPages}</span>
-          </form>
-        )}
+        <div className="flex items-center gap-4">
+          {/* أدوات الزوم */}
+          <div className="flex items-center bg-white/5 rounded-lg border border-white/10 overflow-hidden">
+            <button onClick={() => handleZoom(-0.2)} className="p-1.5 hover:bg-white/10 text-white/60 transition-colors">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg>
+            </button>
+            <span className="text-[9px] font-mono text-white/40 px-2 min-w-[40px] text-center">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => handleZoom(0.2)} className="p-1.5 hover:bg-white/10 text-white/60 transition-colors">
+              <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
+            </button>
+          </div>
+
+          {/* الانتقال لصفحة */}
+          {!loading && !error && (
+            <form onSubmit={goToPage} className="flex items-center gap-2">
+              <input 
+                type="number" 
+                value={jumpPage}
+                onChange={(e) => setJumpPage(e.target.value)}
+                placeholder={currentPage.toString()}
+                className="w-10 bg-white/5 border border-white/10 rounded px-1.5 py-0.5 text-[10px] text-white text-center focus:outline-none focus:border-orange-500/50 transition-colors"
+              />
+              <span className="text-[9px] text-white/20 uppercase font-black tracking-tighter">/ {numPages}</span>
+            </form>
+          )}
+        </div>
       </div>
 
+      {/* منطقة عرض الصفحات - كامل الشاشة وبدون حواف */}
       <div 
         ref={containerRef} 
-        className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center px-8 md:px-[15vw] scrollbar-none scroll-smooth relative"
+        className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center scrollbar-none scroll-smooth relative"
       >
         {loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6 z-50 bg-black">
-            <div className="spinner-arc w-16 h-16 border-t-orange-600"></div>
-            <p className="text-[#a34a28] text-[10px] font-black uppercase tracking-[0.4em] animate-pulse">
-              {lang === 'ar' ? 'جاري استحضار الصفحات...' : 'Summoning Manuscript Pages...'}
+          <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4 z-50 bg-black">
+            <div className="spinner-arc w-12 h-12 border-t-orange-600"></div>
+            <p className="text-[#a34a28] text-[9px] font-black uppercase tracking-[0.3em] animate-pulse">
+              {lang === 'ar' ? 'جاري الاستحضار...' : 'Summoning...'}
             </p>
           </div>
         )}
 
         {error && (
            <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-black">
-             <div className="w-16 h-16 rounded-full bg-red-500/10 flex items-center justify-center mb-6">
-                <svg className="w-8 h-8 text-red-500/40" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" /></svg>
-             </div>
-             <p className="text-[10px] text-red-500/60 font-black uppercase tracking-widest max-w-xs leading-loose">{error}</p>
+             <p className="text-[10px] text-red-500/60 font-black uppercase tracking-widest">{error}</p>
            </div>
         )}
         
         {!loading && !error && Array.from({ length: numPages }, (_, i) => (
-          <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center snap-center">
-            <PageRenderer pdfDoc={pdfDocRef.current} pageNum={i + 1} />
+          <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center snap-center overflow-auto scrollbar-none">
+            <PageRenderer pdfDoc={pdfDocRef.current} pageNum={i + 1} zoom={zoom} />
           </div>
         ))}
       </div>
-
-      {!loading && !error && (
-        <div className="h-10 bg-black/95 border-t border-white/5 flex items-center justify-center px-6 gap-8 z-30 shrink-0">
-           <div className="flex items-center gap-4">
-              <span className="text-[8px] font-black text-white/20 tracking-[0.3em] uppercase">Neural Sync Active</span>
-           </div>
-        </div>
-      )}
     </div>
   );
 };
 
-const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, pageNum }) => {
+const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = ({ pdfDoc, pageNum, zoom }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
@@ -177,16 +178,20 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
   }, []);
 
   useEffect(() => {
-    if (!isVisible || !pdfDoc || !canvasRef.current || isRendered) return;
+    if (!isVisible || !pdfDoc || !canvasRef.current) return;
+    
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 1.5 });
+        // استخدام مقياس أعلى للوضوح مع مراعاة الزوم
+        const viewport = page.getViewport({ scale: 2.0 * zoom });
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
         if (!context) return;
+        
         canvas.height = viewport.height;
         canvas.width = viewport.width;
+        
         await page.render({ canvasContext: context, viewport }).promise;
         setIsRendered(true);
       } catch (err) {
@@ -194,11 +199,11 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
       }
     };
     renderPage();
-  }, [isVisible, pdfDoc, pageNum, isRendered]);
+  }, [isVisible, pdfDoc, pageNum, zoom]);
 
   return (
-    <div className="relative group h-[75vh] flex items-center justify-center">
-      <div className="relative h-full w-auto shadow-2xl rounded-sm overflow-hidden bg-zinc-900 ring-1 ring-white/10">
+    <div className="relative flex items-center justify-center min-h-full min-w-full p-0">
+      <div className="relative shadow-2xl bg-white">
         {!isRendered && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
              <div className="w-6 h-6 border-2 border-white/5 border-t-white/20 rounded-full animate-spin"></div>
@@ -206,12 +211,14 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
         )}
         <canvas 
           ref={canvasRef} 
-          className={`h-full w-auto block object-contain transition-opacity duration-700 ${isRendered ? 'opacity-100' : 'opacity-0'}`} 
-          style={{ backgroundColor: '#fff' }}
+          className={`block object-contain transition-opacity duration-500 ${isRendered ? 'opacity-100' : 'opacity-0'}`}
+          style={{ 
+            width: 'auto', 
+            height: zoom > 1 ? 'auto' : '100vh',
+            maxWidth: '100%',
+            maxHeight: zoom > 1 ? 'none' : '100vh'
+          }}
         />
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-4 py-1.5 rounded-full text-[8px] font-black text-white/40 uppercase tracking-[0.2em] border border-white/10">
-          {pageNum}
-        </div>
       </div>
     </div>
   );
