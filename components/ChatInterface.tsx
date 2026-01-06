@@ -18,6 +18,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
@@ -36,6 +37,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   }, [messages, isLoading]);
 
   const isArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
+
+  const copyToClipboard = (text: string, index: number) => {
+    navigator.clipboard.writeText(text);
+    setCopiedIndex(index);
+    setTimeout(() => setCopiedIndex(null), 2000);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -100,14 +107,27 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
             return (
               <div key={i} className={`flex w-full animate-in fade-in duration-500 ${isUser ? 'justify-end' : 'justify-start'}`}>
                 <div 
-                  className={`flex gap-3 w-full ${isUser ? 'max-w-[92%] flex-row-reverse' : 'max-w-full flex-row'}`}
+                  className={`flex gap-3 w-full group/msg ${isUser ? 'max-w-[92%] flex-row-reverse' : 'max-w-full flex-row'}`}
                   dir={ar ? 'rtl' : 'ltr'}
                 >
                   <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black border mt-1 ${isUser ? 'bg-indigo-600 border-indigo-500' : 'bg-[#a34a28] border-orange-900 shadow-[0_0_10px_rgba(163,74,40,0.3)]'}`}>
                     {isUser ? 'U' : 'AI'}
                   </div>
                   
-                  <div className={`flex-1 min-w-0 ${isUser ? 'bg-[#1a1a1a] rounded-2xl px-4 py-3 border border-white/5' : ''}`}>
+                  <div className={`flex-1 min-w-0 relative ${isUser ? 'bg-[#1a1a1a] rounded-2xl px-4 py-3 border border-white/5' : ''}`}>
+                    {!isUser && msg.content && (
+                      <button 
+                        onClick={() => copyToClipboard(msg.content, i)}
+                        className="absolute top-0 right-0 md:-right-10 p-2 text-white/20 hover:text-orange-500 transition-colors opacity-0 group-hover/msg:opacity-100"
+                        title="Copy Response"
+                      >
+                        {copiedIndex === i ? (
+                          <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                        )}
+                      </button>
+                    )}
                     <div className={`prose prose-invert prose-sm md:prose-base max-w-none ${ar ? 'text-right font-academic' : 'text-left'} ${isStreaming ? 'after:content-["_▋"] after:animate-pulse after:text-orange-500' : ''}`}>
                       <ReactMarkdown
                         remarkPlugins={[remarkMath]}
@@ -115,10 +135,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                         components={{
                           code({ node, inline, className, children, ...props }: any) {
                             const match = /language-(\w+)/.exec(className || '');
+                            const codeContent = String(children).replace(/\n$/, '');
                             return !inline && match ? (
-                              <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
+                              <div className="relative group/code">
+                                <button 
+                                  onClick={() => navigator.clipboard.writeText(codeContent)}
+                                  className="absolute top-2 right-2 p-1.5 bg-white/5 hover:bg-white/10 rounded border border-white/10 text-white/40 hover:text-white transition-all opacity-0 group-hover/code:opacity-100 z-10"
+                                  title="Copy Code"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2" /></svg>
+                                </button>
+                                <SyntaxHighlighter style={vscDarkPlus} language={match[1]} PreTag="div" className="rounded-lg !bg-black text-xs !m-2" {...props}>
+                                  {codeContent}
+                                </SyntaxHighlighter>
+                              </div>
                             ) : (
                               <code className="bg-white/10 px-1.5 py-0.5 rounded text-glow-orange font-mono text-xs" {...props}>{children}</code>
                             );
