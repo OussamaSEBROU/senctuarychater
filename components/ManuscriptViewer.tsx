@@ -10,8 +10,10 @@ interface ManuscriptViewerProps {
 
 export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang }) => {
   const [numPages, setNumPages] = useState<number>(0);
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [jumpPage, setJumpPage] = useState<string>('');
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<any>(null);
   const t = translations[lang];
@@ -23,7 +25,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
       setLoading(true);
       setError(null);
       try {
-        // @ts-ignore - Importing from URL for high performance and no-install deployment
+        // @ts-ignore
         const pdfjsLib = await import('https://esm.sh/pdfjs-dist@4.10.38');
         pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.min.mjs`;
 
@@ -40,7 +42,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         setNumPages(pdfDoc.numPages);
         setLoading(false);
       } catch (err) {
-        console.error("Error loading PDF with pdf.js:", err);
+        console.error("Error loading PDF:", err);
         setError(lang === 'ar' ? "فشل تحميل المحتوى البصري للمخطوط." : "Failed to load manuscript visual core.");
         setLoading(false);
       }
@@ -55,6 +57,35 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     };
   }, [pdf.base64, lang]);
 
+  // مراقبة الصفحة الحالية عند التمرير
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleScroll = () => {
+      const scrollLeft = container.scrollLeft;
+      const width = container.offsetWidth;
+      const page = Math.round(scrollLeft / width) + 1;
+      if (page !== currentPage) setCurrentPage(page);
+    };
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [currentPage]);
+
+  const goToPage = (e: React.FormEvent) => {
+    e.preventDefault();
+    const pageNum = parseInt(jumpPage);
+    if (pageNum > 0 && pageNum <= numPages && containerRef.current) {
+      const width = containerRef.current.offsetWidth;
+      containerRef.current.scrollTo({
+        left: (pageNum - 1) * width,
+        behavior: 'smooth'
+      });
+      setJumpPage('');
+    }
+  };
+
   return (
     <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none">
       <div className="h-12 bg-black/90 border-b border-white/10 flex items-center justify-between px-6 z-30 shadow-2xl shrink-0">
@@ -66,18 +97,29 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
             <span className="text-[10px] font-black tracking-[0.2em] uppercase hidden md:block">Sanctuary Library</span>
           </div>
           <div className="h-4 w-[1px] bg-white/10 hidden md:block"></div>
-          <span className="text-[11px] font-medium text-white/50 truncate max-w-[200px] md:max-w-md">
+          <span className="text-[11px] font-medium text-white/50 truncate max-w-[150px] md:max-w-md">
             {pdf.name}
           </span>
         </div>
-        <div className="flex items-center gap-2">
-           <span className="text-[9px] font-black text-orange-600/80 uppercase tracking-widest animate-pulse">Neural Sync Active</span>
-        </div>
+        
+        {/* خاصية الانتقال لصفحة معينة */}
+        {!loading && !error && (
+          <form onSubmit={goToPage} className="flex items-center gap-2">
+            <input 
+              type="number" 
+              value={jumpPage}
+              onChange={(e) => setJumpPage(e.target.value)}
+              placeholder={currentPage.toString()}
+              className="w-12 bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-orange-500/50 transition-colors"
+            />
+            <span className="text-[10px] text-white/20 uppercase font-black tracking-tighter">/ {numPages}</span>
+          </form>
+        )}
       </div>
 
       <div 
         ref={containerRef} 
-        className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center gap-6 md:gap-24 px-8 md:px-[20vw] scrollbar-none scroll-smooth relative"
+        className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center px-8 md:px-[15vw] scrollbar-none scroll-smooth relative"
       >
         {loading && (
           <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6 z-50 bg-black">
@@ -98,18 +140,16 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         )}
         
         {!loading && !error && Array.from({ length: numPages }, (_, i) => (
-          <PageRenderer key={i} pdfDoc={pdfDocRef.current} pageNum={i + 1} />
+          <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center snap-center">
+            <PageRenderer pdfDoc={pdfDocRef.current} pageNum={i + 1} />
+          </div>
         ))}
       </div>
 
       {!loading && !error && (
-        <div className="h-12 bg-black/95 border-t border-white/5 flex items-center justify-center px-6 gap-8 z-30 shrink-0">
+        <div className="h-10 bg-black/95 border-t border-white/5 flex items-center justify-center px-6 gap-8 z-30 shrink-0">
            <div className="flex items-center gap-4">
-              <span className="text-[9px] font-black text-white/20 tracking-[0.3em] uppercase">Manuscript Navigation</span>
-              <div className="flex items-center bg-white/5 px-4 py-1.5 rounded-full border border-white/10">
-                 <span className="text-[10px] font-mono text-orange-500 font-bold">{numPages}</span>
-                 <span className="text-[10px] font-mono text-white/20 mx-2">TOTAL PAGES</span>
-              </div>
+              <span className="text-[8px] font-black text-white/20 tracking-[0.3em] uppercase">Neural Sync Active</span>
            </div>
         </div>
       )}
@@ -130,65 +170,49 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number }> = ({ pdfDoc, page
           observer.disconnect();
         }
       },
-      { 
-        threshold: 0.1,
-        rootMargin: '0px 400px 0px 400px'
-      }
+      { threshold: 0.1, rootMargin: '0px 400px 0px 400px' }
     );
-
     if (canvasRef.current) observer.observe(canvasRef.current);
     return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
     if (!isVisible || !pdfDoc || !canvasRef.current || isRendered) return;
-
     const renderPage = async () => {
       try {
         const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: window.devicePixelRatio || 1.5 });
+        const viewport = page.getViewport({ scale: 1.5 });
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
-
         if (!context) return;
-
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-
-        const renderContext = {
-          canvasContext: context,
-          viewport: viewport,
-        };
-
-        await page.render(renderContext).promise;
+        await page.render({ canvasContext: context, viewport }).promise;
         setIsRendered(true);
       } catch (err) {
         console.error(`Error rendering page ${pageNum}:`, err);
       }
     };
-
     renderPage();
   }, [isVisible, pdfDoc, pageNum, isRendered]);
 
   return (
-    <div className="relative group h-[70vh] md:h-[80vh] flex-shrink-0 snap-center flex items-center justify-center">
-      <div className="relative h-full w-auto shadow-[0_40px_100px_rgba(0,0,0,0.9)] rounded-sm overflow-hidden bg-zinc-900 ring-1 ring-white/10 transition-transform duration-700 group-hover:scale-[1.01]">
+    <div className="relative group h-[75vh] flex items-center justify-center">
+      <div className="relative h-full w-auto shadow-2xl rounded-sm overflow-hidden bg-zinc-900 ring-1 ring-white/10">
         {!isRendered && (
           <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-             <div className="w-8 h-8 border-2 border-white/5 border-t-white/20 rounded-full animate-spin"></div>
+             <div className="w-6 h-6 border-2 border-white/5 border-t-white/20 rounded-full animate-spin"></div>
           </div>
         )}
         <canvas 
           ref={canvasRef} 
-          className={`h-full w-auto block object-contain transition-opacity duration-1000 ${isRendered ? 'opacity-100' : 'opacity-0'}`} 
+          className={`h-full w-auto block object-contain transition-opacity duration-700 ${isRendered ? 'opacity-100' : 'opacity-0'}`} 
           style={{ backgroundColor: '#fff' }}
         />
-        <div className="absolute bottom-6 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-5 py-2 rounded-full text-[9px] font-black text-white/40 opacity-0 group-hover:opacity-100 transition-all duration-300 uppercase tracking-[0.3em] border border-white/10 shadow-2xl pointer-events-none">
-          Page {pageNum} <span className="mx-1 text-white/10">|</span> {pdfDoc?.numPages || '?'}
+        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/80 backdrop-blur-xl px-4 py-1.5 rounded-full text-[8px] font-black text-white/40 uppercase tracking-[0.2em] border border-white/10">
+          {pageNum}
         </div>
       </div>
-      <div className="absolute -left-12 inset-y-0 w-px bg-gradient-to-b from-transparent via-white/5 to-transparent hidden md:block"></div>
-      <div className="absolute -right-12 inset-y-0 w-px bg-gradient-to-b from-transparent via-white/5 to-transparent hidden md:block"></div>
     </div>
   );
 };
