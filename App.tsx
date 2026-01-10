@@ -8,6 +8,23 @@ import Sidebar from './components/Sidebar';
 import ManuscriptViewer from './components/ManuscriptViewer';
 import { translations } from './translations';
 
+const quotes = {
+  en: [
+    "The only true wisdom is in knowing you know nothing. — Socrates",
+    "Reading is to the mind what exercise is to the body. — Joseph Addison",
+    "Knowledge is power. — Francis Bacon",
+    "The mind is not a vessel to be filled, but a fire to be kindled. — Plutarch",
+    "A room without books is like a body without a soul. — Cicero"
+  ],
+  ar: [
+    "العلم في الصغر كالنقش على الحجر.",
+    "خير جليس في الزمان كتاب. — المتنبي",
+    "القراءة تمد العقل فقط بمواد المعرفة، أما التفكير فهو الذي يجعل ما نقرأه ملكاً لنا. — جون لوك",
+    "الكتب هي الآثار الأكثر بقاءً للزمن. — صمويل سميث",
+    "من لم يذق مر التعلم ساعة، تجرع ذل الجهل طول حياته. — الشافعي"
+  ]
+};
+
 const App: React.FC = () => {
   const [pdf, setPdf] = useState<PDFData | null>(null);
   const [axioms, setAxioms] = useState<Axiom[]>([]);
@@ -15,12 +32,24 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [lang, setLang] = useState<Language>('en');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
   
   const [flowStep, setFlowStep] = useState<'axioms' | 'chat'>('axioms');
   const [showViewer, setShowViewer] = useState(false);
   const carouselRef = useRef<HTMLDivElement>(null);
 
   const t = translations[lang];
+
+  // نظام تبديل المقولات أثناء الرفع
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isSynthesizing) {
+      interval = setInterval(() => {
+        setCurrentQuoteIndex((prev) => (prev + 1) % quotes[lang].length);
+      }, 4000);
+    }
+    return () => clearInterval(interval);
+  }, [isSynthesizing, lang]);
 
   useEffect(() => {
     if (axioms.length > 0 && carouselRef.current) {
@@ -35,7 +64,6 @@ const App: React.FC = () => {
     setFlowStep('axioms');
 
     try {
-      // نمرر اللغة المختارة لضمان استخراج الفلاش كارد باللغة الصحيحة
       const extracted = await extractAxioms(base64, currentLang);
       if (extracted && extracted.length > 0) {
         setAxioms(extracted);
@@ -43,11 +71,8 @@ const App: React.FC = () => {
         throw new Error("EMPTY_RESULT");
       }
     } catch (err: any) {
-      console.error("Full synthesis error object:", err);
+      console.error("Synthesis error:", err);
       let errorMsg = currentLang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.";
-      if (err.message === "API_KEY_MISSING") {
-        errorMsg = currentLang === 'ar' ? "خطأ: مفتاح API غير متوفر." : "Error: API Key is missing.";
-      }
       setError(errorMsg);
       setPdf(null);
     } finally {
@@ -83,11 +108,35 @@ const App: React.FC = () => {
 
   return (
     <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white overflow-hidden ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
+      <style>{`
+        @keyframes shiningText {
+          0% { opacity: 0; transform: translateY(10px); filter: blur(5px); }
+          20% { opacity: 1; transform: translateY(0); filter: blur(0); }
+          80% { opacity: 1; transform: translateY(0); filter: blur(0); }
+          100% { opacity: 0; transform: translateY(-10px); filter: blur(5px); }
+        }
+        .shining-quote {
+          animation: shiningText 4s ease-in-out infinite;
+          background: linear-gradient(90deg, #fff, #a34a28, #fff);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: shiningText 4s ease-in-out infinite, shine 3s linear infinite;
+        }
+        @keyframes shine {
+          to { background-position: 200% center; }
+        }
+      `}</style>
+
       {isSynthesizing && (
-        <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-500">
-          <div className="spinner-arc mb-12"></div>
-          <h2 className="text-white text-lg font-black tracking-[0.4em] mb-10 uppercase">{t.synthesis}</h2>
-          <p className={`italic max-w-md ${lang === 'ar' ? 'text-sm' : 'text-xs opacity-60 leading-relaxed'}`}>{t.covenant}</p>
+        <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-1000">
+          <div className="spinner-arc mb-16 w-20 h-20 border-t-orange-600"></div>
+          <h2 className="text-white text-xl font-black tracking-[0.5em] mb-12 uppercase opacity-40">{t.synthesis}</h2>
+          <div className="h-24 flex items-center justify-center">
+            <p key={currentQuoteIndex} className="shining-quote text-lg md:text-2xl font-medium italic max-w-2xl leading-relaxed px-4">
+              {quotes[lang][currentQuoteIndex]}
+            </p>
+          </div>
         </div>
       )}
 
@@ -125,7 +174,7 @@ const App: React.FC = () => {
               {translations.en.sanctuary}
             </h2>
             <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-glow-orange max-w-2xl leading-tight font-sans">
-              {translations.en.introText}
+              {lang === 'ar' ? translations.ar.introText : translations.en.introText}
             </p>
             <label className="w-full max-w-sm group relative block aspect-[1.3/1] border border-dashed border-white/10 rounded-[3rem] hover:border-[#a34a28]/40 transition-all cursor-pointer bg-white/[0.01]">
               <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} />
