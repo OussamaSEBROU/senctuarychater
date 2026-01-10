@@ -52,66 +52,68 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash";
 
+/**
+ * استخراج الـ Axioms وتهيئة الجلسة بأقصى سرعة.
+ * تم تحسينها لتقليل حجم البيانات المرسلة وضمان استجابة فورية.
+ */
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
     currentPdfBase64 = pdfBase64;
     chatSession = null;
 
-    // طلب استخراج 20 فلاش كارد (Axioms)
-    const extractionPrompt = `${translations[lang].extractionPrompt(lang)}. IMPORTANT: Extract exactly 20 high-quality axioms.`;
+    // إعداد البرومبت لاستخراج 20 فلاش كارد
+    const extractionPrompt = `${translations[lang].extractionPrompt(lang)}. IMPORTANT: Extract exactly 20 high-quality axioms. Be super fast.`;
 
-    const [extractionResponse, sessionInit] = await Promise.all([
-      ai.models.generateContent({
-        model: MODEL_NAME,
-        contents: {
-          parts: [
-            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-            { text: extractionPrompt },
-          ],
-        },
-        config: {
-          systemInstruction: getSystemInstruction(lang),
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.ARRAY,
-            items: {
-              type: Type.OBJECT,
-              properties: {
-                term: { type: Type.STRING },
-                definition: { type: Type.STRING },
-                significance: { type: Type.STRING }
-              },
-              required: ["term", "definition", "significance"],
+    // تنفيذ الطلب الأساسي
+    const response = await ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [
+          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+          { text: extractionPrompt },
+        ],
+      },
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              term: { type: Type.STRING },
+              definition: { type: Type.STRING },
+              significance: { type: Type.STRING }
             },
+            required: ["term", "definition", "significance"],
           },
         },
-      }),
-      
-      (async () => {
-        const session = ai.chats.create({
-          model: MODEL_NAME,
-          config: {
-            systemInstruction: getSystemInstruction(lang),
-            temperature: 0.7,
-          },
-        });
-        await session.sendMessage({
-          message: [
-            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-            { text: "System: Manuscript uploaded. Analyze and wait for user questions. NO introductions. Be super fast." }
-          ]
-        });
-        return session;
-      })()
-    ]);
+      },
+    });
 
-    if (!extractionResponse.text) {
+    if (!response.text) {
       throw new Error("EMPTY_RESPONSE");
     }
 
-    chatSession = sessionInit;
-    return JSON.parse(extractionResponse.text);
+    // تهيئة جلسة الدردشة في الخلفية لضمان سرعة الرد اللاحق
+    chatSession = ai.chats.create({
+      model: MODEL_NAME,
+      config: {
+        systemInstruction: getSystemInstruction(lang),
+        temperature: 0.7,
+      },
+    });
+
+    // إرسال الملف للجلسة لمرة واحدة فقط
+    chatSession.sendMessage({
+      message: [
+        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+        { text: "System: Manuscript uploaded. Analyze it. From now on, I will only send text questions. Respond directly and super fast. NO introductions." }
+      ]
+    }).catch(err => console.error("Background session init error:", err));
+    
+    return JSON.parse(response.text);
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
     throw error;
@@ -126,6 +128,7 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
+    // إذا لم تكن الجلسة جاهزة (مثلاً في حالة إعادة تحميل الصفحة)، نقوم بتهيئتها
     if (!chatSession) {
       chatSession = ai.chats.create({
         model: MODEL_NAME,
@@ -139,12 +142,13 @@ export const chatWithManuscriptStream = async (
         await chatSession.sendMessage({
           message: [
             { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-            { text: "Context: The manuscript is attached. Analyze it and be ready for my questions. NO introductions. Be super fast." }
+            { text: "Context: The manuscript is attached. Analyze it. NO introductions. Be super fast." }
           ]
         });
       }
     }
 
+    // إرسال السؤال كنص فقط (بدون الملف) لضمان السرعة القصوى
     const result = await chatSession.sendMessageStream({ message: userPrompt });
     
     for await (const chunk of result) {
@@ -155,6 +159,7 @@ export const chatWithManuscriptStream = async (
     }
   } catch (error: any) {
     console.error("Stream error in geminiService:", error);
+    // في حالة الخطأ، نصفر الجلسة لمحاولة إعادة التهيئة في المرة القادمة
     chatSession = null; 
     throw error;
   }
