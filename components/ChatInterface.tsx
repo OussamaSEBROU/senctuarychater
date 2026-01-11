@@ -6,7 +6,7 @@ import rehypeKatex from 'rehype-katex';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { vscDarkPlus } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import { Message, PDFData, Language } from '../types';
-import { chatWithManuscriptStream } from '../services/geminiService';
+import { chatWithManuscriptStream, getManuscriptSnippets } from '../services/geminiService';
 import { translations } from '../translations';
 
 interface ChatInterfaceProps {
@@ -14,69 +14,36 @@ interface ChatInterfaceProps {
   lang: Language;
 }
 
-// مصفوفة المقولات المصغرة للدردشة
-const chatQuotes = {
-  en: [
-    "The gift of mental power comes from God. — Nikola Tesla",
-    "Imagination is more important than knowledge. — Albert Einstein",
-    "Science without religion is lame. — Albert Einstein",
-    "Innovation distinguishes between a leader and a follower. — Steve Jobs",
-    "Simplicity is the ultimate sophistication. — Leonardo da Vinci",
-    "The best way to predict the future is to invent it. — Alan Kay",
-    "Stay hungry, stay foolish. — Steve Jobs"
-  ],
-  ar: [
-    "إن الحضارة لا تباع ولا تشترى، وإنما هي نتاج جهد فكري. — مالك بن نبي",
-    "الأفكار هي التي تصنع التاريخ. — مالك بن نبي",
-    "الحرية هي القدرة على اختيار الخير. — علي عزت بيجوفيتش",
-    "العلم بلا أخلاق هو دمار للبشرية. — البشير الإبراهيمي",
-    "الوهم نصف الداء، والاطمئنان نصف الدواء. — ابن سينا",
-    "العدل هو ميزان الله في الأرض. — ابن عاشور",
-    "العمل هو تجسيد للمنطق. — طه عبد الرحمن"
-  ]
-};
-
-// نصوص الحالة التقنية للدردشة
-const chatStatusMessages = {
-  en: [
-    "Deep thinking in progress...",
-    "Analyzing manuscript context...",
-    "Synthesizing response...",
-    "Mapping neural links...",
-    "Finalizing answer..."
-  ],
-  ar: [
-    "تفكير معمق في الأفكار...",
-    "تحليل سياق المخطوط...",
-    "توليف الإجابة النهائية...",
-    "رسم الروابط العصبية...",
-    "إتمام صياغة الرد..."
-  ]
-};
-
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
-  const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
-  const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
+  const [currentSnippet, setCurrentSnippet] = useState("");
+  const [usedSnippets, setUsedSnippets] = useState<Set<string>>(new Set());
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
-  // نظام تبديل المقولات ونصوص الحالة أثناء انتظار الرد
+  // نظام عرض جمل عشوائية من المخطوط أثناء انتظار الرد
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
-      setCurrentQuoteIndex(Math.floor(Math.random() * chatQuotes[lang].length));
-      setCurrentStatusIndex(0);
-      interval = setInterval(() => {
-        setCurrentQuoteIndex(Math.floor(Math.random() * chatQuotes[lang].length));
-        setCurrentStatusIndex(prev => (prev + 1) % chatStatusMessages[lang].length);
-      }, 4000);
+      const snippets = getManuscriptSnippets();
+      const updateSnippet = () => {
+        if (snippets.length > 0) {
+          const available = snippets.filter(s => !usedSnippets.has(s));
+          const source = available.length > 0 ? available : snippets;
+          const random = source[Math.floor(Math.random() * source.length)];
+          setCurrentSnippet(random);
+          setUsedSnippets(prev => new Set(prev).add(random));
+        }
+      };
+      
+      updateSnippet();
+      interval = setInterval(updateSnippet, 5000);
     }
     return () => clearInterval(interval);
-  }, [isLoading, lang]);
+  }, [isLoading, usedSnippets]);
 
   const handleAutoScroll = () => {
     if (scrollRef.current) {
@@ -150,12 +117,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
           100% { opacity: 0; transform: translateY(-5px); }
         }
         .mini-shining-quote {
-          animation: miniShine 4s ease-in-out infinite;
+          animation: miniShine 5s ease-in-out infinite;
           background: linear-gradient(90deg, #888, #a34a28, #888);
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          animation: miniShine 4s ease-in-out infinite, shine 3s linear infinite;
+          animation: miniShine 5s ease-in-out infinite, shine 3s linear infinite;
         }
         @keyframes shine {
           to { background-position: 200% center; }
@@ -252,12 +219,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                     <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce"></div>
                   </div>
                   <span className="text-[8px] font-black uppercase tracking-widest text-orange-500/40 animate-pulse">
-                    {chatStatusMessages[lang][currentStatusIndex]}
+                    {lang === 'ar' ? 'تفكير معمق في المخطوط...' : 'Deep thinking in manuscript...'}
                   </span>
                 </div>
-                <div className="h-6 flex items-center">
-                  <p key={currentQuoteIndex} className="mini-shining-quote text-[10px] md:text-xs italic font-medium opacity-60">
-                    {chatQuotes[lang][currentQuoteIndex]}
+                <div className="h-12 flex items-center">
+                  <p key={currentSnippet} className="mini-shining-quote text-[10px] md:text-xs italic font-medium opacity-60 leading-relaxed">
+                    {currentSnippet}
                   </p>
                 </div>
               </div>
