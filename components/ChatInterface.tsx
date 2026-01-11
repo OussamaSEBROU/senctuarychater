@@ -14,13 +14,69 @@ interface ChatInterfaceProps {
   lang: Language;
 }
 
+// مصفوفة المقولات المصغرة للدردشة
+const chatQuotes = {
+  en: [
+    "The gift of mental power comes from God. — Nikola Tesla",
+    "Imagination is more important than knowledge. — Albert Einstein",
+    "Science without religion is lame. — Albert Einstein",
+    "Innovation distinguishes between a leader and a follower. — Steve Jobs",
+    "Simplicity is the ultimate sophistication. — Leonardo da Vinci",
+    "The best way to predict the future is to invent it. — Alan Kay",
+    "Stay hungry, stay foolish. — Steve Jobs"
+  ],
+  ar: [
+    "إن الحضارة لا تباع ولا تشترى، وإنما هي نتاج جهد فكري. — مالك بن نبي",
+    "الأفكار هي التي تصنع التاريخ. — مالك بن نبي",
+    "الحرية هي القدرة على اختيار الخير. — علي عزت بيجوفيتش",
+    "العلم بلا أخلاق هو دمار للبشرية. — البشير الإبراهيمي",
+    "الوهم نصف الداء، والاطمئنان نصف الدواء. — ابن سينا",
+    "العدل هو ميزان الله في الأرض. — ابن عاشور",
+    "العمل هو تجسيد للمنطق. — طه عبد الرحمن"
+  ]
+};
+
+// نصوص الحالة التقنية للدردشة
+const chatStatusMessages = {
+  en: [
+    "Deep thinking in progress...",
+    "Analyzing manuscript context...",
+    "Synthesizing response...",
+    "Mapping neural links...",
+    "Finalizing answer..."
+  ],
+  ar: [
+    "تفكير معمق في الأفكار...",
+    "تحليل سياق المخطوط...",
+    "توليف الإجابة النهائية...",
+    "رسم الروابط العصبية...",
+    "إتمام صياغة الرد..."
+  ]
+};
+
 const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+  const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
+
+  // نظام تبديل المقولات ونصوص الحالة أثناء انتظار الرد
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isLoading) {
+      setCurrentQuoteIndex(Math.floor(Math.random() * chatQuotes[lang].length));
+      setCurrentStatusIndex(0);
+      interval = setInterval(() => {
+        setCurrentQuoteIndex(Math.floor(Math.random() * chatQuotes[lang].length));
+        setCurrentStatusIndex(prev => (prev + 1) % chatStatusMessages[lang].length);
+      }, 4000);
+    }
+    return () => clearInterval(interval);
+  }, [isLoading, lang]);
 
   const handleAutoScroll = () => {
     if (scrollRef.current) {
@@ -86,6 +142,26 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
+      <style>{`
+        @keyframes miniShine {
+          0% { opacity: 0; transform: translateY(5px); }
+          20% { opacity: 1; transform: translateY(0); }
+          80% { opacity: 1; transform: translateY(0); }
+          100% { opacity: 0; transform: translateY(-5px); }
+        }
+        .mini-shining-quote {
+          animation: miniShine 4s ease-in-out infinite;
+          background: linear-gradient(90deg, #888, #a34a28, #888);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          animation: miniShine 4s ease-in-out infinite, shine 3s linear infinite;
+        }
+        @keyframes shine {
+          to { background-position: 200% center; }
+        }
+      `}</style>
+
       <div 
         ref={scrollRef} 
         className="flex-1 overflow-y-auto overflow-x-hidden pt-4 md:pt-6 pb-40 touch-auto"
@@ -124,7 +200,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                         {copiedIndex === i ? (
                           <svg className="w-4 h-4 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
                         ) : (
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" /></svg>
                         )}
                       </button>
                     )}
@@ -165,6 +241,28 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
               </div>
             );
           })}
+
+          {isLoading && (
+            <div className="flex justify-start animate-in fade-in duration-300">
+              <div className="flex flex-col gap-2 max-w-[85%]">
+                <div className="flex items-center gap-3">
+                  <div className="flex gap-1">
+                    <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
+                    <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
+                    <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce"></div>
+                  </div>
+                  <span className="text-[8px] font-black uppercase tracking-widest text-orange-500/40 animate-pulse">
+                    {chatStatusMessages[lang][currentStatusIndex]}
+                  </span>
+                </div>
+                <div className="h-6 flex items-center">
+                  <p key={currentQuoteIndex} className="mini-shining-quote text-[10px] md:text-xs italic font-medium opacity-60">
+                    {chatQuotes[lang][currentQuoteIndex]}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
 
