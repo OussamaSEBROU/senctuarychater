@@ -8,100 +8,90 @@ import Sidebar from './components/Sidebar';
 import ManuscriptViewer from './components/ManuscriptViewer';
 import { translations } from './translations';
 
+// مصفوفة المقولات المختارة بعناية من المصادر المحددة
 const quotes = {
   en: [
-    "The only true wisdom is in knowing you know nothing. — Socrates",
-    "Reading is to the mind what exercise is to the body. — Joseph Addison",
-    "Knowledge is power. — Francis Bacon",
-    "The mind is not a vessel to be filled, but a fire to be kindled. — Plutarch",
-    "A room without books is like a body without a soul. — Cicero",
-    "I think, therefore I am. — René Descartes",
-    "The unexamined life is not worth living. — Socrates",
-    "Happiness depends upon ourselves. — Aristotle",
-    "Man is born free, and everywhere he is in chains. — Jean-Jacques Rousseau",
-    "He who has a why to live can bear almost any how. — Friedrich Nietzsche",
-    "The only thing I know is that I know nothing. — Socrates",
-    "To be is to be perceived. — George Berkeley",
-    "God is dead. — Friedrich Nietzsche",
-    "Hell is other people. — Jean-Paul Sartre",
-    "One cannot step twice in the same river. — Heraclitus",
-    "The life of man is solitary, poor, nasty, brutish, and short. — Thomas Hobbes",
-    "Whereof one cannot speak, thereof one must be silent. — Ludwig Wittgenstein",
-    "Entities should not be multiplied unnecessarily. — William of Ockham",
-    "The brave man is he who overcomes not only his enemies but his pleasures. — Democritus",
-    "Freedom is what you do with what's been done to you. — Jean-Paul Sartre",
-    "The world is the best of all possible worlds. — Gottfried Wilhelm Leibniz",
-    "I can control my passions and emotions if I can understand their nature. — Baruch Spinoza",
-    "There is only one good, knowledge, and one evil, ignorance. — Socrates",
-    "We are what we repeatedly do. Excellence, then, is not an act, but a habit. — Aristotle",
-    "The foundation of every state is the education of its youth. — Diogenes",
-    "The journey of a thousand miles begins with one step. — Lao Tzu",
-    "Life is really simple, but we insist on making it complicated. — Confucius",
-    "The only way to do great work is to love what you do. — Steve Jobs",
+    "The present is theirs; the future, for which I really worked, is mine. — Nikola Tesla",
+    "I do not think you can name many great inventions that have been made by married men. — Nikola Tesla",
+    "Our virtues and our failings are inseparable, like force and matter. — Nikola Tesla",
+    "The scientists of today think deeply instead of clearly. — Nikola Tesla",
+    "The gift of mental power comes from God, Divine Being. — Nikola Tesla",
+    "Imagination is more important than knowledge. — Albert Einstein",
+    "The only real valuable thing is intuition. — Albert Einstein",
+    "Science without religion is lame, religion without science is blind. — Albert Einstein",
+    "A person who never made a mistake never tried anything new. — Albert Einstein",
+    "The important thing is not to stop questioning. — Albert Einstein",
+    "Technology is nothing. What's important is that you have a faith in people. — Steve Jobs",
+    "Design is not just what it looks like and feels like. Design is how it works. — Steve Jobs",
+    "The people who are crazy enough to think they can change the world are the ones who do. — Steve Jobs",
     "Innovation distinguishes between a leader and a follower. — Steve Jobs",
     "Stay hungry, stay foolish. — Steve Jobs",
-    "The greatest glory in living lies not in never falling, but in rising every time we fall. — Nelson Mandela",
-    "The way to get started is to quit talking and begin doing. — Walt Disney",
-    "Your time is limited, so don't waste it living someone else's life. — Steve Jobs",
-    "If life were predictable it would cease to be life, and be without flavor. — Eleanor Roosevelt",
-    "If you look at what you have in life, you'll always have more. — Oprah Winfrey",
-    "If you set your goals ridiculously high and it's a failure, you will fail above everyone else's success. — James Cameron",
-    "Life is what happens when you're making other plans. — John Lennon",
-    "Spread love everywhere you go. Let no one ever come to you without leaving happier. — Mother Teresa",
-    "When you reach the end of your rope, tie a knot in it and hang on. — Franklin D. Roosevelt",
-    "Always remember that you are absolutely unique. Just like everyone else. — Margaret Mead",
-    "Don't judge each day by the harvest you reap but by the seeds that you plant. — Robert Louis Stevenson",
-    "The future belongs to those who believe in the beauty of their dreams. — Eleanor Roosevelt",
-    "Tell me and I forget. Teach me and I remember. Involve me and I learn. — Benjamin Franklin",
-    "The best and most beautiful things in the world cannot be seen or even touched — they must be felt with the heart. — Helen Keller",
-    "It is during our darkest moments that we must focus to see the light. — Aristotle"
+    "The best way to predict the future is to invent it. — Alan Kay",
+    "The computer is the most remarkable tool that we've ever come up with. — Steve Jobs",
+    "Simplicity is the ultimate sophistication. — Leonardo da Vinci",
+    "Nature is the source of all true knowledge. — Leonardo da Vinci",
+    "Learning never exhausts the mind. — Leonardo da Vinci",
+    "The unexamined life is not worth living. — Socrates",
+    "Turn your wounds into wisdom. — Oprah Winfrey",
+    "You must be the change you wish to see in the world. — Mahatma Gandhi",
+    "The only way to do great work is to love what you do. — Steve Jobs",
+    "Innovation distinguishes between a leader and a follower. — Steve Jobs"
   ],
   ar: [
-    "العلم في الصغر كالنقش على الحجر.",
-    "خير جليس في الزمان كتاب. — المتنبي",
-    "القراءة تمد العقل فقط بمواد المعرفة، أما التفكير فهو الذي يجعل ما نقرأه ملكاً لنا. — جون لوك",
-    "الكتب هي الآثار الأكثر بقاءً للزمن. — صمويل سميث",
-    "من لم يذق مر التعلم ساعة، تجرع ذل الجهل طول حياته. — الشافعي",
-    "العدل أساس الملك. — ابن خلدون",
-    "الوقت كالسيف إن لم تقطعه قطعك.",
-    "اطلبوا العلم من المهد إلى اللحد.",
-    "العقل السليم في الجسم السليم.",
-    "ليس اليتيم من انتهى أبواه، إن اليتيم يتيم العلم والأدب. — أحمد شوقي",
-    "ما استحق أن يولد من عاش لنفسه فقط.",
-    "الجمال ليس بأثواب تزيننا، إن الجمال جمال العلم والأدب. — علي بن أبي طالب",
-    "رأس الحكمة مخافة الله.",
-    "من جد وجد ومن زرع حصد.",
-    "لا تؤجل عمل اليوم إلى الغد.",
-    "العلم نور والجهل ظلام.",
-    "من علمني حرفاً كنت له عبداً.",
-    "الكلمة الطيبة صدقة.",
-    "القناعة كنز لا يفنى.",
-    "الصبر مفتاح الفرج.",
-    "اتق شر من أحسنت إليه.",
-    "في التأني السلامة وفي العجلة الندامة.",
-    "لسانك حصانك إن صنته صانك وإن هنته هانك.",
-    "من حفر حفرة لأخيه وقع فيها.",
-    "الطيور على أشكالها تقع.",
-    "رب أخ لم تلده أمك.",
-    "مصائب قوم عند قوم فوائد.",
-    "إذا تم العقل نقص الكلام.",
-    "العلم بلا عمل كالشجر بلا ثمر.",
-    "من كثر كلامه كثر سقطه.",
-    "أعز مكان في الدنا سرج سابح، وخير جليس في الزمان كتاب. — المتنبي",
-    "إنما الأمم الأخلاق ما بقيت، فإن هم ذهبت أخلاقهم ذهبوا. — أحمد شوقي",
-    "على قدر أهل العزم تأتي العزائم. — المتنبي",
-    "ما كل ما يتمنى المرء يدركه، تجري الرياح بما لا تشتهي السفن. — المتنبي",
-    "إذا رأيت نيوب الليث بارزة، فلا تظنن أن الليث يبتسم. — المتنبي",
-    "الخيل والليل والبيداء تعرفني، والسيف والرمح والقرطاس والقلم. — المتنبي",
-    "أنا الذي نظر الأعمى إلى أدبي، وأسمعت كلماتي من به صمم. — المتنبي",
-    "لا تحسبن المجد تمراً أنت آكله، لن تبلغ المجد حتى تلعق الصبرا.",
-    "وإذا كانت النفوس كباراً، تعبت في مرادها الأجسام. — المتنبي",
-    "ذو العقل يشقى في النعيم بعقله، وأخو الجهالة في الشقاوة ينعم. — المتنبي",
-    "ولم أر في عيوب الناس شيئاً، كنقص القادرين على التمام. — المتنبي",
-    "بقدر الكد تكتسب المعالي، ومن طلب العلا سهر الليالي. — الشافعي",
-    "أحب الصالحين ولست منهم، لعلي أن أنال بهم شفاعة. — الشافعي",
-    "يخاطبني السفيه بكل قبح، فأكره أن أكون له مجيباً. — الشافعي",
-    "إذا نطق السفيه فلا تجبه، فخير من إجابته السكوت. — الشافعي"
+    "إن الحضارة لا تباع ولا تشترى، وإنما هي نتاج جهد فكري وعملي دؤوب. — مالك بن نبي (شروط النهضة)",
+    "الأفكار هي التي تصنع التاريخ، والعمل هو الذي يجسدها. — مالك بن نبي (وجهة العالم الإسلامي)",
+    "التكنولوجيا بلا روح هي أداة للتدمير، أما التكنولوجيا الموجهة بالقيم فهي وسيلة للتحرر. — مالك بن نبي",
+    "إن مشكلة كل شعب هي في جوهرها مشكلة حضارته. — مالك بن نبي",
+    "لا يمكن لعالم أن ينهض إذا كان يستهلك أفكار غيره دون تمحيص. — مالك بن نبي",
+    "الحرية ليست مجرد غياب القيود، بل هي القدرة على اختيار الخير. — علي عزت بيجوفيتش (الإسلام بين الشرق والغرب)",
+    "الصلاة لا تغير العالم، ولكنها تغير الإنسان الذي سيغير العالم. — علي عزت بيجوفيتش",
+    "إن المجتمع الذي لا يقرأ هو مجتمع لا يفكر، والمجتمع الذي لا يفكر لا يمكنه أن يبني حضارة. — علي عزت بيجوفيتش",
+    "التكنولوجيا يجب أن تخدم الإنسان، لا أن تستعبده. — علي عزت بيجوفيتش",
+    "الإيمان هو الذي يعطي للحياة معنى، والعمل هو الذي يعطي للإيمان قيمة. — علي عزت بيجوفيتش",
+    "العلم بلا أخلاق هو دمار للبشرية. — البشير الإبراهيمي",
+    "إن الأمة التي تنسى تاريخها لا يمكنها أن نبني مستقبلها. — البشير الإبراهيمي",
+    "اللغة هي وعاء الفكر، فإذا فسد الوعاء فسد ما فيه. — البشير الإبراهيمي",
+    "العمل هو المقياس الحقيقي لقيمة الإنسان. — البشير الإبراهيمي",
+    "الاستعمار الفكري أخطر من الاستعمار العسكري. — البشير الإبراهيمي",
+    "الوهم نصف الداء، والاطمئنان نصف الدواء، والصبر أول خطوات الشفاء. — ابن سينا (القانون في الطب)",
+    "العقل البشري هو أعظم هبة من الله، وبه ندرك الحقائق. — ابن سينا",
+    "العلم هو معرفة الأشياء بحقائقها. — ابن سينا",
+    "المعرفة هي القوة التي تمكننا من فهم الكون. — ابن سينا",
+    "الطب هو حفظ الصحة وشفاء المرض. — ابن سينا",
+    "مقاصد الشريعة هي حفظ مصالح العباد في الدارين. — ابن عاشور (مقاصد الشريعة الإسلامية)",
+    "الاجتهاد هو روح الشريعة، وبه تبقى صالحة لكل زمان ومكان. — ابن عاشور",
+    "التعليم هو الأساس الذي تبنى عليه الأمم. — ابن عاشور",
+    "الحرية هي حق أصيل لكل إنسان، ولا يجوز سلبها إلا بحق. — ابن عاشور",
+    "العدل هو ميزان الله في الأرض. — ابن عاشور",
+    "العمل هو تجسيد للمنطق، والمنطق هو روح العمل. — طه عبد الرحمن (روح الحداثة)",
+    "لا حداثة بلا أخلاق، ولا أخلاق بلا إيمان. — طه عبد الرحمن",
+    "التكنولوجيا هي تجلٍ للعقل، ولكن يجب أن تخضع للقيم. — طه عبد الرحمن",
+    "الإنسان هو كائن أخلاقي بامتياز، وعمله يجب أن يعكس ذلك. — طه عبد الرحمن",
+    "الحوار هو السبيل الوحيد للتفاهم بين الحضارات. — طه عبد الرحمن",
+    "إن الإنسان في غاية الحاجة لمركزية 'منطق العمل' كما هو في حاجة لمركزية 'منطق الفكرة'. — طه عبد الرحمن",
+    "التقنية ليست مجرد أدوات، بل هي نمط من الوجود يتطلب وعياً أخلاقياً. — طه عبد الرحمن"
+  ]
+};
+
+// نصوص الحالة التقنية
+const statusMessages = {
+  en: [
+    "Analyzing manuscript structure...",
+    "Deep thinking in progress...",
+    "Extracting axiomatic wisdom...",
+    "Synthesizing neural connections...",
+    "Mapping intellectual framework...",
+    "Decoding author's logic...",
+    "Finalizing neural sync..."
+  ],
+  ar: [
+    "يتم تحليل بنية المخطوط...",
+    "تفكير معمق في الأفكار المركزية...",
+    "استخراج الحكمة الأكسيومية...",
+    "توليف الروابط العصبية...",
+    "رسم الإطار الفكري...",
+    "فك شفرة منطق المؤلف...",
+    "إتمام المزامنة العصبية..."
   ]
 };
 
@@ -113,6 +103,7 @@ const App: React.FC = () => {
   const [lang, setLang] = useState<Language>('en');
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [currentQuoteIndex, setCurrentQuoteIndex] = useState(0);
+  const [currentStatusIndex, setCurrentStatusIndex] = useState(0);
   
   const [flowStep, setFlowStep] = useState<'axioms' | 'chat'>('axioms');
   const [showViewer, setShowViewer] = useState(false);
@@ -123,9 +114,13 @@ const App: React.FC = () => {
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isSynthesizing) {
+      setCurrentQuoteIndex(Math.floor(Math.random() * quotes[lang].length));
+      setCurrentStatusIndex(0);
+      
       interval = setInterval(() => {
-        setCurrentQuoteIndex((prev) => (prev + 1) % quotes[lang].length);
-      }, 4000);
+        setCurrentQuoteIndex(Math.floor(Math.random() * quotes[lang].length));
+        setCurrentStatusIndex(prev => (prev + 1) % statusMessages[lang].length);
+      }, 5000);
     }
     return () => clearInterval(interval);
   }, [isSynthesizing, lang]);
@@ -189,18 +184,18 @@ const App: React.FC = () => {
     <div className={`fixed inset-0 flex flex-col bg-[#020202] text-white overflow-hidden ${lang === 'ar' ? 'rtl font-academic' : 'ltr font-sans'}`} dir={lang === 'ar' ? 'rtl' : 'ltr'}>
       <style>{`
         @keyframes shiningText {
-          0% { opacity: 0; transform: translateY(10px); filter: blur(5px); }
-          20% { opacity: 1; transform: translateY(0); filter: blur(0); }
-          80% { opacity: 1; transform: translateY(0); filter: blur(0); }
-          100% { opacity: 0; transform: translateY(-10px); filter: blur(5px); }
+          0% { opacity: 0; transform: translateY(15px); filter: blur(8px); }
+          15% { opacity: 1; transform: translateY(0); filter: blur(0); }
+          85% { opacity: 1; transform: translateY(0); filter: blur(0); }
+          100% { opacity: 0; transform: translateY(-15px); filter: blur(8px); }
         }
         .shining-quote {
-          animation: shiningText 4s ease-in-out infinite;
+          animation: shiningText 5s ease-in-out infinite;
           background: linear-gradient(90deg, #fff, #a34a28, #fff);
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          animation: shiningText 4s ease-in-out infinite, shine 3s linear infinite;
+          animation: shiningText 5s ease-in-out infinite, shine 4s linear infinite;
         }
         @keyframes shine {
           to { background-position: 200% center; }
@@ -209,10 +204,19 @@ const App: React.FC = () => {
 
       {isSynthesizing && (
         <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-1000">
-          <div className="spinner-arc mb-16 w-20 h-20 border-t-orange-600"></div>
-          <h2 className="text-white text-xl font-black tracking-[0.5em] mb-12 uppercase opacity-40">{t.synthesis}</h2>
-          <div className="h-24 flex items-center justify-center">
-            <p key={currentQuoteIndex} className="shining-quote text-lg md:text-2xl font-medium italic max-w-2xl leading-relaxed px-4">
+          <div className="spinner-arc mb-16 w-24 h-24 border-t-orange-600"></div>
+          
+          {/* نص الحالة التقنية */}
+          <div className="mb-4 h-6">
+            <p className="text-orange-500/60 text-[10px] font-black tracking-[0.4em] uppercase animate-pulse">
+              {statusMessages[lang][currentStatusIndex]}
+            </p>
+          </div>
+
+          <h2 className="text-white text-xl font-black tracking-[0.6em] mb-12 uppercase opacity-30">{t.synthesis}</h2>
+          
+          <div className="h-32 flex items-center justify-center">
+            <p key={currentQuoteIndex} className="shining-quote text-xl md:text-3xl font-medium italic max-w-3xl leading-relaxed px-6">
               {quotes[lang][currentQuoteIndex]}
             </p>
           </div>
