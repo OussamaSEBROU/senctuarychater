@@ -278,3 +278,4 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 };
 
 export default ChatInterface;
+
