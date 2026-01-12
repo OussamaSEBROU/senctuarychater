@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -24,7 +23,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
-  // نظام عرض جمل عشوائية من المخطوط أثناء انتظار الرد
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
@@ -40,7 +38,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       };
       
       updateSnippet();
-      interval = setInterval(updateSnippet, 5000);
+      interval = setInterval(updateSnippet, 6000); // Match animation duration
     }
     return () => clearInterval(interval);
   }, [isLoading, usedSnippets]);
@@ -109,22 +107,35 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
-          <style>{`
-            @keyframes cinematicFade {
-              0% { opacity: 0; filter: blur(10px); transform: scale(0.95); }
-              15% { opacity: 1; filter: blur(0); transform: scale(1); }
-              85% { opacity: 1; filter: blur(0); transform: scale(1); }
-              100% { opacity: 0; filter: blur(10px); transform: scale(1.05); }
-            }
-            .cinematic-quote {
-              animation: cinematicFade 6s ease-in-out infinite;
-              background: linear-gradient(to right, #fff, #a34a28, #fff);
-              -webkit-background-clip: text;
-              -webkit-text-fill-color: transparent;
-              text-shadow: 0 0 20px rgba(163,74,40,0.2);
-              letter-spacing: 0.05em;
-            }
-          `}</style>
+      <style>{`
+        @keyframes cinematicFade {
+          0% { opacity: 0; filter: blur(8px); transform: translateY(10px) scale(0.98); }
+          15% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+          85% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
+          100% { opacity: 0; filter: blur(8px); transform: translateY(-10px) scale(1.02); }
+        }
+        .cinematic-quote-container {
+          perspective: 1000px;
+          width: 100%;
+          display: flex;
+          justify-content: center;
+          align-items: center;
+          min-height: 80px;
+        }
+        .cinematic-quote {
+          animation: cinematicFade 6s ease-in-out infinite;
+          background: linear-gradient(to right, #fff, #a34a28, #fff);
+          background-size: 200% auto;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          text-shadow: 0 0 30px rgba(163,74,40,0.3);
+          letter-spacing: 0.02em;
+          text-align: center;
+          font-style: italic;
+          font-weight: 500;
+          line-height: 1.6;
+        }
+      `}</style>
 
       <div 
         ref={scrollRef} 
@@ -208,8 +219,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
           {isLoading && (
             <div className="flex justify-start animate-in fade-in duration-300">
-              <div className="flex flex-col gap-2 max-w-[85%]">
-                <div className="flex items-center gap-3">
+              <div className="flex flex-col gap-2 w-full max-w-3xl mx-auto">
+                <div className="flex items-center justify-center gap-3 mb-4">
                   <div className="flex gap-1">
                     <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
@@ -219,10 +230,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                     {lang === 'ar' ? 'تفكير معمق في المخطوط...' : 'Deep thinking in manuscript...'}
                   </span>
                 </div>
-                <div className="h-12 flex items-center">
-<p key={currentSnippet} className="cinematic-quote text-[10px] md:text-sm italic font-medium leading-relaxed text-center w-full">
-                        {currentSnippet}
-                      </p>
+                <div className="cinematic-quote-container">
+                  <p key={currentSnippet} className="cinematic-quote text-sm md:text-lg">
+                    {currentSnippet}
+                  </p>
                 </div>
               </div>
             </div>
