@@ -1,17 +1,17 @@
-
 import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
 import { Axiom, Language } from "../types";
 import { translations } from "../translations";
 
 let chatSession: Chat | null = null;
-let currentPdfBase64: string | null = null;
 let manuscriptSnippets: string[] = [];
+let documentChunks: string[] = [];
+let fullManuscriptText: string = "";
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure. 
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
 
 MANDATORY TOPICAL CONSTRAINT:
-Your primary function is to analyze, synthesize, and expand upon the content of the provided PDF manuscript. 
+Your primary function is to analyze, synthesize, and expand upon the content of the provided PDF manuscript chunks. 
 - If a user asks a question that is completely unrelated to the PDF content, its themes, its author, or the intellectual development of its ideas, you must politely inform them that you are specialized in the deep extraction of wisdom from this specific manuscript.
 
 MANDATORY PRE-RESPONSE ANALYSIS:
@@ -42,15 +42,53 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash";
 
+/**
+ * RAG Helper: Simple chunking strategy
+ */
+const chunkText = (text: string, chunkSize: number = 1500, overlap: number = 300): string[] => {
+  const chunks: string[] = [];
+  let start = 0;
+  while (start < text.length) {
+    const end = Math.min(start + chunkSize, text.length);
+    chunks.push(text.substring(start, end));
+    if (end === text.length) break;
+    start += chunkSize - overlap;
+  }
+  return chunks;
+};
+
+/**
+ * RAG Helper: Simple semantic retrieval simulation
+ * In a production environment, this would use embeddings.
+ * Here we use a keyword-based scoring for speed and zero-dependency.
+ */
+const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 4): string[] => {
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const scoredChunks = chunks.map(chunk => {
+    const chunkLower = chunk.toLowerCase();
+    let score = 0;
+    queryWords.forEach(word => {
+      if (chunkLower.includes(word)) score += 1;
+    });
+    return { chunk, score };
+  });
+
+  return scoredChunks
+    .sort((a, b) => b.score - a.score)
+    .slice(0, topK)
+    .map(item => item.chunk);
+};
+
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
-    currentPdfBase64 = pdfBase64;
     chatSession = null;
 
+    // Step 1: Extract full text and axioms in one go to initialize RAG
     const extractionPrompt = `${translations[lang].extractionPrompt(lang)}. 
     IMPORTANT: Extract exactly 20 high-quality axioms. 
-    ALSO: Extract 10 short, profound, and useful snippets or quotes from the text that can be shown to the user during waiting times.
+    ALSO: Extract 10 short, profound, and useful snippets or quotes from the text.
+    CRITICAL: Also provide the FULL TEXT content of the PDF for our internal indexing.
     Return everything in the specified JSON format.`;
 
     const response = await ai.models.generateContent({
@@ -82,16 +120,23 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
             snippets: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
-            }
+            },
+            fullText: { type: Type.STRING }
           },
-          required: ["axioms", "snippets"],
+          required: ["axioms", "snippets", "fullText"],
         },
       },
     });
 
-    const result = JSON.parse(response.text);
+    const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
+    fullManuscriptText = result.fullText || "";
+    
+    // Step 2: Ingest into RAG (Chunking)
+    documentChunks = chunkText(fullManuscriptText);
+    console.log(`RAG Ingestion complete: ${documentChunks.length} chunks created.`);
 
+    // Initialize a clean chat session
     chatSession = ai.chats.create({
       model: MODEL_NAME,
       config: {
@@ -99,13 +144,6 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
         temperature: 0.7,
       },
     });
-
-    chatSession.sendMessage({
-      message: [
-        { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-        { text: "System: Manuscript uploaded. Analyze it. From now on, I will only send text questions. Respond directly and super fast. NO introductions." }
-      ]
-    }).catch(err => console.error("Background session init error:", err));
     
     return result.axioms;
   } catch (error: any) {
@@ -124,6 +162,19 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
+    // Step 3: Retrieval
+    const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
+    const contextText = relevantChunks.join("\n\n---\n\n");
+    
+    // Step 4: Generation with Context
+    const augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
+${contextText}
+
+USER QUESTION:
+${userPrompt}
+
+INSTRUCTION: Answer the user question using ONLY the provided context from the manuscript. If the answer is not in the context, use your knowledge of the manuscript's themes to provide a sophisticated response consistent with the author's style.`;
+
     if (!chatSession) {
       chatSession = ai.chats.create({
         model: MODEL_NAME,
@@ -132,18 +183,9 @@ export const chatWithManuscriptStream = async (
           temperature: 0.7,
         },
       });
-
-      if (currentPdfBase64) {
-        await chatSession.sendMessage({
-          message: [
-            { inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } },
-            { text: "Context: The manuscript is attached. Analyze it. NO introductions. Be super fast." }
-          ]
-        });
-      }
     }
 
-    const result = await chatSession.sendMessageStream({ message: userPrompt });
+    const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
     
     for await (const chunk of result) {
       const chunkText = (chunk as GenerateContentResponse).text;
