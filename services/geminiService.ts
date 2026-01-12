@@ -59,10 +59,9 @@ const chunkText = (text: string, chunkSize: number = 1500, overlap: number = 300
 
 /**
  * RAG Helper: Simple semantic retrieval simulation
- * In a production environment, this would use embeddings.
- * Here we use a keyword-based scoring for speed and zero-dependency.
  */
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 4): string[] => {
+  if (chunks.length === 0) return [];
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
   const scoredChunks = chunks.map(chunk => {
     const chunkLower = chunk.toLowerCase();
@@ -84,20 +83,18 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     const ai = getGeminiClient();
     chatSession = null;
 
-    // Step 1: Extract full text and axioms in one go to initialize RAG
-    // Optimization: Reduced the number of axioms to 10 for faster processing as requested
-    const extractionPrompt = `${translations[lang].extractionPrompt(lang)}. 
-    IMPORTANT: Extract exactly 10 high-quality axioms. 
+    // Optimization: Stage 1 - Extract ONLY Axioms and Snippets first for immediate UI response
+    const fastPrompt = `${translations[lang].extractionPrompt(lang)}. 
+    IMPORTANT: Extract exactly 6 high-quality axioms. 
     ALSO: Extract 8 short, profound, and useful snippets or quotes from the text.
-    CRITICAL: Also provide the FULL TEXT content of the PDF for our internal indexing.
-    Return everything in the specified JSON format.`;
+    Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
         parts: [
           { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: extractionPrompt },
+          { text: fastPrompt },
         ],
       },
       config: {
@@ -121,23 +118,33 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
             snippets: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
-            },
-            fullText: { type: Type.STRING }
+            }
           },
-          required: ["axioms", "snippets", "fullText"],
+          required: ["axioms", "snippets"],
         },
       },
     });
 
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
-    fullManuscriptText = result.fullText || "";
     
-    // Step 2: Ingest into RAG (Chunking)
-    documentChunks = chunkText(fullManuscriptText);
-    console.log(`RAG Ingestion complete: ${documentChunks.length} chunks created.`);
+    // Stage 2: Background processing for full text indexing (RAG)
+    // We don't await this to keep the UI fast
+    ai.models.generateContent({
+      model: MODEL_NAME,
+      contents: {
+        parts: [
+          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+          { text: "Extract the FULL TEXT of this PDF. Return ONLY the text content." },
+        ],
+      },
+    }).then(res => {
+      fullManuscriptText = res.text || "";
+      documentChunks = chunkText(fullManuscriptText);
+      console.log("Background RAG indexing complete.");
+    }).catch(err => console.error("Background indexing error:", err));
 
-    // Initialize a clean chat session
+    // Initialize chat session
     chatSession = ai.chats.create({
       model: MODEL_NAME,
       config: {
@@ -163,18 +170,19 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
-    // Step 3: Retrieval
+    // Retrieval
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
-    const contextText = relevantChunks.join("\n\n---\n\n");
+    const contextText = relevantChunks.length > 0 
+      ? relevantChunks.join("\n\n---\n\n") 
+      : "No specific context retrieved yet. Use your general knowledge of the manuscript if available.";
     
-    // Step 4: Generation with Context
     const augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
 ${contextText}
 
 USER QUESTION:
 ${userPrompt}
 
-INSTRUCTION: Answer the user question using ONLY the provided context from the manuscript. If the answer is not in the context, use your knowledge of the manuscript's themes to provide a sophisticated response consistent with the author's style.`;
+INSTRUCTION: Answer the user question using the provided context. If the context is empty, respond based on the manuscript's themes.`;
 
     if (!chatSession) {
       chatSession = ai.chats.create({
