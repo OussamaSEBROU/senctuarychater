@@ -85,9 +85,10 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
 
     // Step 1: Extract full text and axioms in one go to initialize RAG
+    // Optimization: Reduced the number of axioms to 10 for faster processing as requested
     const extractionPrompt = `${translations[lang].extractionPrompt(lang)}. 
-    IMPORTANT: Extract exactly 20 high-quality axioms. 
-    ALSO: Extract 10 short, profound, and useful snippets or quotes from the text.
+    IMPORTANT: Extract exactly 10 high-quality axioms. 
+    ALSO: Extract 8 short, profound, and useful snippets or quotes from the text.
     CRITICAL: Also provide the FULL TEXT content of the PDF for our internal indexing.
     Return everything in the specified JSON format.`;
 
