@@ -109,25 +109,22 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   return (
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
-      <style>{`
-        @keyframes miniShine {
-          0% { opacity: 0; transform: translateY(5px); }
-          20% { opacity: 1; transform: translateY(0); }
-          80% { opacity: 1; transform: translateY(0); }
-          100% { opacity: 0; transform: translateY(-5px); }
-        }
-        .mini-shining-quote {
-          animation: miniShine 5s ease-in-out infinite;
-          background: linear-gradient(90deg, #888, #a34a28, #888);
-          background-size: 200% auto;
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-          animation: miniShine 5s ease-in-out infinite, shine 3s linear infinite;
-        }
-        @keyframes shine {
-          to { background-position: 200% center; }
-        }
-      `}</style>
+          <style>{`
+            @keyframes cinematicFade {
+              0% { opacity: 0; filter: blur(10px); transform: scale(0.95); }
+              15% { opacity: 1; filter: blur(0); transform: scale(1); }
+              85% { opacity: 1; filter: blur(0); transform: scale(1); }
+              100% { opacity: 0; filter: blur(10px); transform: scale(1.05); }
+            }
+            .cinematic-quote {
+              animation: cinematicFade 6s ease-in-out infinite;
+              background: linear-gradient(to right, #fff, #a34a28, #fff);
+              -webkit-background-clip: text;
+              -webkit-text-fill-color: transparent;
+              text-shadow: 0 0 20px rgba(163,74,40,0.2);
+              letter-spacing: 0.05em;
+            }
+          `}</style>
 
       <div 
         ref={scrollRef} 
@@ -223,9 +220,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                   </span>
                 </div>
                 <div className="h-12 flex items-center">
-                  <p key={currentSnippet} className="mini-shining-quote text-[10px] md:text-xs italic font-medium opacity-60 leading-relaxed">
-                    {currentSnippet}
-                  </p>
+<p key={currentSnippet} className="cinematic-quote text-[10px] md:text-sm italic font-medium leading-relaxed text-center w-full">
+                        {currentSnippet}
+                      </p>
                 </div>
               </div>
             </div>
