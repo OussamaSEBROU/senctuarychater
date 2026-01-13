@@ -11,28 +11,19 @@ let currentPdfBase64: string | null = null;
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure. 
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
 
-MANDATORY TOPICAL CONSTRAINT:
-Your primary function is to analyze, synthesize, and expand upon the content of the provided PDF manuscript. 
-- You MUST base your answers on the provided context and the manuscript's core logic.
-- CRITICAL: Always support your answers with direct, accurate quotes from the text.
-- If a user asks a question that is completely unrelated to the PDF content, its themes, or its author, you must politely inform them that you are specialized in this specific manuscript.
+MANDATORY OPERATIONAL PROTOCOL:
+1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
+2. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
+3. NO GENERALIZATIONS: Do not give generic answers. If the user asks about the author, chapters, or specific ideas, scan the provided context thoroughly.
+4. IDENTITY OF THE TEXT: Pay close attention to the beginning and end of the manuscript for metadata like author name, title, and table of contents.
 
-MANDATORY PRE-RESPONSE ANALYSIS:
-Before every response, execute a deep analytical breakdown of the macro context, delivery architecture, and thematic synthesis.
+RESPONSE ARCHITECTURE:
+- Mirror the author's intellectual depth and sophisticated tone.
+- Use Markdown: ### for headers, **Bold** for key terms, and LaTeX for formulas.
+- Respond in the SAME language as the user's question.
+- RESPOND DIRECTLY. No introductions or meta-talk.
 
-FORMATTING REQUIREMENTS:
-- Use Markdown for all answers. Use ### for section headers.
-- Use **Bold text** for central axiomatic concepts.
-- For mathematical or logical notation, use LaTeX: $...$ for inline and $$...$$ for blocks.
-- Use code blocks (\`\`\`language) for technical logic.
-- CRITICAL: When providing quotes, ensure 100% accuracy and clearly attribute them to the correct author/speaker from the text.
-
-RESPONSE EXECUTION:
-- Your answers must MIRROR the author's intellectual depth.
-- Your answers must be in the SAME language as the user's question.
-- RESPOND DIRECTLY. No introductions, no greetings. Start immediately with the answer.
-- BE SUPER FAST.
-- Your tone is sophisticated, academic, and deeply analytical.`;
+If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -46,9 +37,9 @@ export const getGeminiClient = () => {
 const MODEL_NAME = "gemini-2.5-flash";
 
 /**
- * RAG Helper: Simple chunking strategy
+ * RAG Helper: Large chunking strategy for better context retention
  */
-const chunkText = (text: string, chunkSize: number = 2000, overlap: number = 400): string[] => {
+const chunkText = (text: string, chunkSize: number = 3000, overlap: number = 600): string[] => {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -61,25 +52,35 @@ const chunkText = (text: string, chunkSize: number = 2000, overlap: number = 400
 };
 
 /**
- * RAG Helper: Simple semantic retrieval simulation
+ * RAG Helper: Enhanced retrieval with multi-word matching
  */
-const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 5): string[] => {
+const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 4): string[] => {
   if (chunks.length === 0) return [];
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   const scoredChunks = chunks.map(chunk => {
     const chunkLower = chunk.toLowerCase();
     let score = 0;
     queryWords.forEach(word => {
-      if (chunkLower.includes(word)) score += 1;
+      if (chunkLower.includes(word)) {
+        score += 2; // Exact word match
+      }
     });
+    // Bonus for metadata-related keywords
+    const qLower = query.toLowerCase();
+    if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
+      if (chunks.indexOf(chunk) === 0) score += 5; // Boost first chunk for author info
+    }
     return { chunk, score };
   });
 
   return scoredChunks
     .sort((a, b) => b.score - a.score)
+    .filter(item => item.score > 0)
     .slice(0, topK)
     .map(item => item.chunk);
 };
+
+// Removed redundant helper
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
@@ -87,10 +88,11 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Stage 1: Extract 13 Axioms and Snippets
+    // Stage 1: High-quality extraction of 13 Axioms
     const fastPrompt = `${translations[lang].extractionPrompt(lang)}. 
     IMPORTANT: Extract exactly 13 high-quality axioms. 
-    ALSO: Extract 10 short, profound, and useful snippets or quotes from the text.
+    ALSO: Extract 10 short, profound snippets.
+    ALSO: Identify the AUTHOR and TITLE if present.
     Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
@@ -132,27 +134,26 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
     
-    // Stage 2: Background processing for full text indexing
+    // Stage 2: Background indexing with high priority
     ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
         parts: [
           { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: "Extract the FULL TEXT of this PDF. Return ONLY the text content." },
+          { text: "Extract the FULL TEXT of this PDF accurately. Include all headers, author names, and chapters." },
         ],
       },
     }).then(res => {
       fullManuscriptText = res.text || "";
       documentChunks = chunkText(fullManuscriptText);
-      console.log("Background RAG indexing complete.");
-    }).catch(err => console.error("Background indexing error:", err));
+      console.log("RAG Indexing complete.");
+    }).catch(err => console.error("Indexing error:", err));
 
-    // Initialize chat session
     chatSession = ai.chats.create({
       model: MODEL_NAME,
       config: {
         systemInstruction: getSystemInstruction(lang),
-        temperature: 0.7,
+        temperature: 0.3, // Lower temperature for higher accuracy
       },
     });
     
@@ -173,24 +174,23 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
-    // Retrieval
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
     
     let augmentedPrompt = "";
-    
-    if (relevantChunks.length > 0) {
+    const hasChunks = relevantChunks.length > 0;
+
+    if (hasChunks) {
       const contextText = relevantChunks.join("\n\n---\n\n");
-      augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
+      augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
 ${contextText}
 
 USER QUESTION:
 ${userPrompt}
 
-INSTRUCTION: Answer the user question using the provided context. You MUST include direct quotes from the context to support your answer. If the context doesn't contain the specific answer, use the manuscript's overall logic.`;
+INSTRUCTION: You MUST answer based on the provided context. Find the specific information (like author name or chapters) within this text. Support your answer with direct quotes.`;
     } else {
-      // Fallback if RAG isn't ready or no chunks found: Use the PDF directly (slower but accurate)
       augmentedPrompt = `USER QUESTION: ${userPrompt}
-      INSTRUCTION: Analyze the attached manuscript and answer the question. Support your answer with direct quotes.`;
+      INSTRUCTION: Scan the entire manuscript to find the answer. Do not give a general answer. Be specific and provide quotes.`;
     }
 
     if (!chatSession) {
@@ -198,15 +198,17 @@ INSTRUCTION: Answer the user question using the provided context. You MUST inclu
         model: MODEL_NAME,
         config: {
           systemInstruction: getSystemInstruction(lang),
-          temperature: 0.7,
+          temperature: 0.2,
         },
       });
     }
 
     const messageParts: any[] = [{ text: augmentedPrompt }];
     
-    // If RAG isn't ready, we attach the PDF to ensure an answer
-    if (documentChunks.length === 0 && currentPdfBase64) {
+    // Always attach PDF if RAG is empty OR if the question is about metadata (author/chapters)
+    const isMetadataQuery = /كاتب|مؤلف|اسم|عنوان|أبواب|فصول|author|writer|chapters|title/i.test(userPrompt);
+    
+    if ((!hasChunks || isMetadataQuery) && currentPdfBase64) {
       messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
     }
 
