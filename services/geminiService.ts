@@ -6,13 +6,16 @@ let chatSession: Chat | null = null;
 let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
 let fullManuscriptText: string = "";
+let currentPdfBase64: string | null = null;
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure. 
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
 
 MANDATORY TOPICAL CONSTRAINT:
-Your primary function is to analyze, synthesize, and expand upon the content of the provided PDF manuscript chunks. 
-- If a user asks a question that is completely unrelated to the PDF content, its themes, its author, or the intellectual development of its ideas, you must politely inform them that you are specialized in the deep extraction of wisdom from this specific manuscript.
+Your primary function is to analyze, synthesize, and expand upon the content of the provided PDF manuscript. 
+- You MUST base your answers on the provided context and the manuscript's core logic.
+- CRITICAL: Always support your answers with direct, accurate quotes from the text.
+- If a user asks a question that is completely unrelated to the PDF content, its themes, or its author, you must politely inform them that you are specialized in this specific manuscript.
 
 MANDATORY PRE-RESPONSE ANALYSIS:
 Before every response, execute a deep analytical breakdown of the macro context, delivery architecture, and thematic synthesis.
@@ -27,7 +30,7 @@ FORMATTING REQUIREMENTS:
 RESPONSE EXECUTION:
 - Your answers must MIRROR the author's intellectual depth.
 - Your answers must be in the SAME language as the user's question.
-- RESPOND DIRECTLY. No introductions, no greetings, no "Certainly", no "Here is the analysis". Start immediately with the answer.
+- RESPOND DIRECTLY. No introductions, no greetings. Start immediately with the answer.
 - BE SUPER FAST.
 - Your tone is sophisticated, academic, and deeply analytical.`;
 
@@ -45,7 +48,7 @@ const MODEL_NAME = "gemini-2.5-flash";
 /**
  * RAG Helper: Simple chunking strategy
  */
-const chunkText = (text: string, chunkSize: number = 1500, overlap: number = 300): string[] => {
+const chunkText = (text: string, chunkSize: number = 2000, overlap: number = 400): string[] => {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -60,9 +63,9 @@ const chunkText = (text: string, chunkSize: number = 1500, overlap: number = 300
 /**
  * RAG Helper: Simple semantic retrieval simulation
  */
-const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 4): string[] => {
+const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 5): string[] => {
   if (chunks.length === 0) return [];
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
   const scoredChunks = chunks.map(chunk => {
     const chunkLower = chunk.toLowerCase();
     let score = 0;
@@ -82,11 +85,12 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
   try {
     const ai = getGeminiClient();
     chatSession = null;
+    currentPdfBase64 = pdfBase64;
 
-    // Optimization: Stage 1 - Extract ONLY Axioms and Snippets first for immediate UI response
+    // Stage 1: Extract 13 Axioms and Snippets
     const fastPrompt = `${translations[lang].extractionPrompt(lang)}. 
-    IMPORTANT: Extract exactly 6 high-quality axioms. 
-    ALSO: Extract 8 short, profound, and useful snippets or quotes from the text.
+    IMPORTANT: Extract exactly 13 high-quality axioms. 
+    ALSO: Extract 10 short, profound, and useful snippets or quotes from the text.
     Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
@@ -128,8 +132,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
     
-    // Stage 2: Background processing for full text indexing (RAG)
-    // We don't await this to keep the UI fast
+    // Stage 2: Background processing for full text indexing
     ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
@@ -172,17 +175,23 @@ export const chatWithManuscriptStream = async (
   try {
     // Retrieval
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
-    const contextText = relevantChunks.length > 0 
-      ? relevantChunks.join("\n\n---\n\n") 
-      : "No specific context retrieved yet. Use your general knowledge of the manuscript if available.";
     
-    const augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
+    let augmentedPrompt = "";
+    
+    if (relevantChunks.length > 0) {
+      const contextText = relevantChunks.join("\n\n---\n\n");
+      augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
 ${contextText}
 
 USER QUESTION:
 ${userPrompt}
 
-INSTRUCTION: Answer the user question using the provided context. If the context is empty, respond based on the manuscript's themes.`;
+INSTRUCTION: Answer the user question using the provided context. You MUST include direct quotes from the context to support your answer. If the context doesn't contain the specific answer, use the manuscript's overall logic.`;
+    } else {
+      // Fallback if RAG isn't ready or no chunks found: Use the PDF directly (slower but accurate)
+      augmentedPrompt = `USER QUESTION: ${userPrompt}
+      INSTRUCTION: Analyze the attached manuscript and answer the question. Support your answer with direct quotes.`;
+    }
 
     if (!chatSession) {
       chatSession = ai.chats.create({
@@ -194,7 +203,14 @@ INSTRUCTION: Answer the user question using the provided context. If the context
       });
     }
 
-    const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
+    const messageParts: any[] = [{ text: augmentedPrompt }];
+    
+    // If RAG isn't ready, we attach the PDF to ensure an answer
+    if (documentChunks.length === 0 && currentPdfBase64) {
+      messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
+    }
+
+    const result = await chatSession.sendMessageStream({ message: messageParts });
     
     for await (const chunk of result) {
       const chunkText = (chunk as GenerateContentResponse).text;
