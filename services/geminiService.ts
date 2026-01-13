@@ -13,15 +13,15 @@ IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention 
 
 MANDATORY OPERATIONAL PROTOCOL:
 1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
-2. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
-3. NO GENERALIZATIONS: Do not give generic answers. If the user asks about the author, chapters, or specific ideas, scan the provided context thoroughly.
-4. IDENTITY OF THE TEXT: Pay close attention to the beginning and end of the manuscript for metadata like author name, title, and table of contents.
+2. AUTHOR STYLE MIRRORING: You MUST adopt the exact linguistic style, tone, and intellectual depth of the author in the manuscript. If the author is philosophical, be philosophical. If academic, be academic.
+3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
+4. NO GENERALIZATIONS: Do not give generic answers. Scan the provided context thoroughly for specific details.
 
 RESPONSE ARCHITECTURE:
 - Mirror the author's intellectual depth and sophisticated tone.
 - Use Markdown: ### for headers, **Bold** for key terms, and LaTeX for formulas.
 - Respond in the SAME language as the user's question.
-- RESPOND DIRECTLY. No introductions or meta-talk.
+- RESPOND DIRECTLY. No introductions or meta-talk. BE SUPER FAST.
 
 If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
 
@@ -62,13 +62,12 @@ const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 
     let score = 0;
     queryWords.forEach(word => {
       if (chunkLower.includes(word)) {
-        score += 2; // Exact word match
+        score += 2;
       }
     });
-    // Bonus for metadata-related keywords
     const qLower = query.toLowerCase();
     if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
-      if (chunks.indexOf(chunk) === 0) score += 5; // Boost first chunk for author info
+      if (chunks.indexOf(chunk) === 0) score += 5;
     }
     return { chunk, score };
   });
@@ -80,19 +79,16 @@ const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 
     .map(item => item.chunk);
 };
 
-// Removed redundant helper
-
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Stage 1: High-quality extraction of 13 Axioms
+    // Stage 1: High-quality extraction of 13 Axioms and ACCURATE quotes
     const fastPrompt = `${translations[lang].extractionPrompt(lang)}. 
     IMPORTANT: Extract exactly 13 high-quality axioms. 
-    ALSO: Extract 10 short, profound snippets.
-    ALSO: Identify the AUTHOR and TITLE if present.
+    ALSO: Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text. These must be verbatim.
     Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
@@ -134,7 +130,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
     
-    // Stage 2: Background indexing with high priority
+    // Stage 2: Background indexing
     ai.models.generateContent({
       model: MODEL_NAME,
       contents: {
@@ -153,7 +149,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
       model: MODEL_NAME,
       config: {
         systemInstruction: getSystemInstruction(lang),
-        temperature: 0.3, // Lower temperature for higher accuracy
+        temperature: 0.2,
       },
     });
     
@@ -187,10 +183,10 @@ ${contextText}
 USER QUESTION:
 ${userPrompt}
 
-INSTRUCTION: You MUST answer based on the provided context. Find the specific information (like author name or chapters) within this text. Support your answer with direct quotes.`;
+INSTRUCTION: You MUST answer based on the provided context. Adopt the author's style. Support your answer with direct quotes.`;
     } else {
       augmentedPrompt = `USER QUESTION: ${userPrompt}
-      INSTRUCTION: Scan the entire manuscript to find the answer. Do not give a general answer. Be specific and provide quotes.`;
+      INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's style. Be specific and provide quotes.`;
     }
 
     if (!chatSession) {
@@ -204,8 +200,6 @@ INSTRUCTION: You MUST answer based on the provided context. Find the specific in
     }
 
     const messageParts: any[] = [{ text: augmentedPrompt }];
-    
-    // Always attach PDF if RAG is empty OR if the question is about metadata (author/chapters)
     const isMetadataQuery = /كاتب|مؤلف|اسم|عنوان|أبواب|فصول|author|writer|chapters|title/i.test(userPrompt);
     
     if ((!hasChunks || isMetadataQuery) && currentPdfBase64) {
