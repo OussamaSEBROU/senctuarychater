@@ -38,7 +38,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       };
       
       updateSnippet();
-      interval = setInterval(updateSnippet, 6000); // Match animation duration
+      interval = setInterval(updateSnippet, 6000);
     }
     return () => clearInterval(interval);
   }, [isLoading, usedSnippets]);
@@ -109,18 +109,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
     <div className="flex flex-col h-full bg-[#050505] relative overflow-hidden">
       <style>{`
         @keyframes cinematicFade {
-          0% { opacity: 0; filter: blur(8px); transform: translateY(10px) scale(0.98); }
+          0% { opacity: 0; filter: blur(12px); transform: translateY(20px) scale(0.95); }
           15% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
           85% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
-          100% { opacity: 0; filter: blur(8px); transform: translateY(-10px) scale(1.02); }
+          100% { opacity: 0; filter: blur(12px); transform: translateY(-20px) scale(1.05); }
         }
         .cinematic-quote-container {
-          perspective: 1000px;
+          perspective: 1200px;
           width: 100%;
           display: flex;
           justify-content: center;
           align-items: center;
-          min-height: 80px;
+          min-height: 120px;
+          padding: 0 20px;
         }
         .cinematic-quote {
           animation: cinematicFade 6s ease-in-out infinite;
@@ -128,12 +129,13 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          text-shadow: 0 0 30px rgba(163,74,40,0.3);
-          letter-spacing: 0.02em;
+          text-shadow: 0 0 40px rgba(163,74,40,0.4);
+          letter-spacing: 0.03em;
           text-align: center;
           font-style: italic;
-          font-weight: 500;
-          line-height: 1.6;
+          font-weight: 600;
+          line-height: 1.8;
+          max-width: 800px;
         }
       `}</style>
 
@@ -219,19 +221,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
           {isLoading && (
             <div className="flex justify-start animate-in fade-in duration-300">
-              <div className="flex flex-col gap-2 w-full max-w-3xl mx-auto">
-                <div className="flex items-center justify-center gap-3 mb-4">
+              <div className="flex flex-col gap-2 w-full max-w-4xl mx-auto">
+                <div className="flex items-center justify-center gap-3 mb-6">
                   <div className="flex gap-1">
                     <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce [animation-delay:-0.3s]"></div>
                     <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce [animation-delay:-0.15s]"></div>
                     <div className="w-1.5 h-1.5 bg-orange-600 rounded-full animate-bounce"></div>
                   </div>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-orange-500/40 animate-pulse">
-                    {lang === 'ar' ? 'تفكير معمق في المخطوط...' : 'Deep thinking in manuscript...'}
+                  <span className="text-[9px] font-black uppercase tracking-widest text-orange-500/60 animate-pulse">
+                    {lang === 'ar' ? 'يتم الآن استحضار جوهر المخطوط...' : 'Summoning the manuscript essence...'}
                   </span>
                 </div>
                 <div className="cinematic-quote-container">
-                  <p key={currentSnippet} className="cinematic-quote text-sm md:text-lg">
+                  <p key={currentSnippet} className="cinematic-quote text-base md:text-xl">
                     {currentSnippet}
                   </p>
                 </div>
@@ -286,4 +288,3 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 };
 
 export default ChatInterface;
-
