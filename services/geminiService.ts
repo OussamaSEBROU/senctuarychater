@@ -85,10 +85,12 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Stage 1: High-quality extraction of 13 Axioms and ACCURATE quotes
-    const fastPrompt = `${translations[lang].extractionPrompt(lang)}. 
-    IMPORTANT: Extract exactly 13 high-quality axioms. 
-    ALSO: Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text. These must be verbatim.
+    // Optimized Stage: Single request for Axioms, Snippets, and Full Text to save tokens
+    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript. 
+    2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
+    3. Extract the FULL TEXT of this PDF accurately, including all headers and chapters.
+    
+    IMPORTANT: The 'axioms' and 'snippets' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
     Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
@@ -96,7 +98,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
       contents: {
         parts: [
           { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: fastPrompt },
+          { text: combinedPrompt },
         ],
       },
       config: {
@@ -120,30 +122,19 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
             snippets: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
-            }
+            },
+            fullText: { type: Type.STRING }
           },
-          required: ["axioms", "snippets"],
+          required: ["axioms", "snippets", "fullText"],
         },
       },
     });
 
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
-    
-    // Stage 2: Background indexing
-    ai.models.generateContent({
-      model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: "Extract the FULL TEXT of this PDF accurately. Include all headers, author names, and chapters." },
-        ],
-      },
-    }).then(res => {
-      fullManuscriptText = res.text || "";
-      documentChunks = chunkText(fullManuscriptText);
-      console.log("RAG Indexing complete.");
-    }).catch(err => console.error("Indexing error:", err));
+    fullManuscriptText = result.fullText || "";
+    documentChunks = chunkText(fullManuscriptText);
+    console.log("Single-pass extraction and RAG indexing complete.");
 
     chatSession = ai.chats.create({
       model: MODEL_NAME,
