@@ -23,6 +23,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
+  // --- Typing Speed Configuration ---
+  const typingSpeed = 30; // Change this value to adjust speed (ms per character)
+  // ----------------------------------
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
@@ -76,20 +80,31 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
     setInput('');
     setIsLoading(true);
 
-    let accumulatedResponse = "";
+    let fullResponse = "";
 
     try {
       await chatWithManuscriptStream(userText, lang, (chunk) => {
-        accumulatedResponse += chunk;
-        setMessages(prev => {
-          const newMessages = [...prev];
-          newMessages[newMessages.length - 1] = { 
-            role: 'model', 
-            content: accumulatedResponse 
-          };
-          return newMessages;
-        });
+        fullResponse += chunk;
       });
+
+      let currentIndex = 0;
+      const typingInterval = setInterval(() => {
+        if (currentIndex < fullResponse.length) {
+          currentIndex++;
+          setMessages(prev => {
+            const newMessages = [...prev];
+            newMessages[newMessages.length - 1] = { 
+              role: 'model', 
+              content: fullResponse.substring(0, currentIndex)
+            };
+            return newMessages;
+          });
+        } else {
+          clearInterval(typingInterval);
+          setIsLoading(false);
+        }
+      }, typingSpeed);
+
     } catch (error) {
       console.error("Stream error:", error);
       setMessages(prev => {
@@ -100,7 +115,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
         };
         return newMessages;
       });
-    } finally {
       setIsLoading(false);
     }
   };
