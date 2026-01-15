@@ -7,9 +7,14 @@ let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
 let fullManuscriptText: string = "";
 let currentPdfBase64: string | null = null;
+let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure. 
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
+${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
+- Title: ${manuscriptMetadata.title}
+- Author: ${manuscriptMetadata.author}
+- Structure: ${manuscriptMetadata.chapters}` : ""}
 
 MANDATORY OPERATIONAL PROTOCOL:
 1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
@@ -85,12 +90,13 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Optimized Stage: Single request for Axioms, Snippets, and Full Text to save tokens
+    // Optimized Stage: Single request for Axioms, Snippets, Metadata, and Full Text
     const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript. 
     2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-    3. Extract the FULL TEXT of this PDF accurately, including all headers and chapters.
+    3. Extract the FULL TEXT of this PDF accurately.
+    4. Identify the Title, Author, and a brief list of Chapters/Structure.
     
-    IMPORTANT: The 'axioms' and 'snippets' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
+    IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
     Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
@@ -123,9 +129,17 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
               type: Type.ARRAY,
               items: { type: Type.STRING }
             },
+            metadata: {
+              type: Type.OBJECT,
+              properties: {
+                title: { type: Type.STRING },
+                author: { type: Type.STRING },
+                chapters: { type: Type.STRING }
+              }
+            },
             fullText: { type: Type.STRING }
           },
-          required: ["axioms", "snippets", "fullText"],
+          required: ["axioms", "snippets", "metadata", "fullText"],
         },
       },
     });
@@ -133,8 +147,9 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
     fullManuscriptText = result.fullText || "";
+    manuscriptMetadata = result.metadata || {};
     documentChunks = chunkText(fullManuscriptText);
-    console.log("Single-pass extraction and RAG indexing complete.");
+    console.log("Single-pass extraction with Metadata indexing complete.");
 
     chatSession = ai.chats.create({
       model: MODEL_NAME,
@@ -191,9 +206,8 @@ INSTRUCTION: You MUST answer based on the provided context. Adopt the author's s
     }
 
     const messageParts: any[] = [{ text: augmentedPrompt }];
-    const isMetadataQuery = /كاتب|مؤلف|اسم|عنوان|أبواب|فصول|author|writer|chapters|title/i.test(userPrompt);
-    
-    if ((!hasChunks || isMetadataQuery) && currentPdfBase64) {
+    // We no longer need to send the full PDF for metadata queries because it's now in the System Instruction
+    if (!hasChunks && currentPdfBase64) {
       messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
     }
 
