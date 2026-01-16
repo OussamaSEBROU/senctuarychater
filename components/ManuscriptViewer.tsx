@@ -15,9 +15,52 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
   const [error, setError] = useState<string | null>(null);
   const [jumpPage, setJumpPage] = useState<string>('');
   const [zoom, setZoom] = useState<number>(1.0);
+  const [readingTime, setReadingTime] = useState<number>(0); // بالثواني
+  const [showAchievement, setShowAchievement] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const pdfDocRef = useRef<any>(null);
   const t = translations[lang];
+
+  // نظام تتبع وقت القراءة والنجوم
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setReadingTime(prev => prev + 1);
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const getStars = (seconds: number) => {
+    const mins = seconds / 60;
+    if (mins >= 120) return 6;
+    if (mins >= 90) return 5;
+    if (mins >= 60) return 4;
+    if (mins >= 40) return 3;
+    if (mins >= 15) return 2;
+    if (mins >= 5) return 1;
+    return 0;
+  };
+
+  const getNextMilestone = (seconds: number) => {
+    const mins = seconds / 60;
+    if (mins < 5) return { time: 5, stars: 1 };
+    if (mins < 15) return { time: 15, stars: 2 };
+    if (mins < 40) return { time: 40, stars: 3 };
+    if (mins < 60) return { time: 60, stars: 4 };
+    if (mins < 90) return { time: 90, stars: 5 };
+    if (mins < 120) return { time: 120, stars: 6 };
+    return null;
+  };
+
+  const stars = getStars(readingTime);
+  const next = getNextMilestone(readingTime);
+
+  useEffect(() => {
+    if (stars > 0) {
+      setShowAchievement(`🌟 ${stars} ${lang === 'ar' ? 'نجوم' : 'Stars'}`);
+      const timeout = setTimeout(() => setShowAchievement(null), 5000);
+      return () => clearTimeout(timeout);
+    }
+  }, [stars, lang]);
 
   useEffect(() => {
     if (!pdf.base64) return;
@@ -97,7 +140,36 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
   };
 
   return (
-    <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none">
+    <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none relative">
+      <style>{`
+        @keyframes shine-3d {
+          0% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+          50% { transform: perspective(1000px) rotateX(10deg) rotateY(10deg) scale(1.1); text-shadow: 0 0 30px rgba(255,165,0,0.8), 0 0 50px rgba(255,165,0,0.4); }
+          100% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
+        }
+        .achievement-popup {
+          animation: shine-3d 2s ease-in-out infinite;
+          background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,165,0,0.2));
+          backdrop-filter: blur(10px);
+          border: 1px solid rgba(255,165,0,0.3);
+          box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,165,0,0.2);
+        }
+      `}</style>
+
+      {/* رسالة الإنجاز السينمائية */}
+      {showAchievement && (
+        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
+          <div className="achievement-popup px-8 py-4 rounded-2xl text-center">
+            <h2 className="text-2xl md:text-4xl font-black text-white mb-1 tracking-tighter">
+              {showAchievement}
+            </h2>
+            <p className="text-[10px] uppercase tracking-[0.3em] text-orange-500 font-bold">
+              {lang === 'ar' ? 'إنجاز معرفي جديد' : 'New Knowledge Achievement'}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* شريط الأدوات العلوي */}
       <div className="h-12 bg-black/90 border-b border-white/10 flex items-center justify-between px-4 z-30 shrink-0">
         <div className="flex items-center gap-3">
@@ -107,6 +179,27 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         </div>
         
         <div className="flex items-center gap-3 md:gap-6">
+          {/* عداد النجوم والوقت */}
+          <div className="hidden md:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+            <div className="flex gap-0.5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <span key={i} className={`text-xs ${i < stars ? 'grayscale-0' : 'grayscale opacity-20'}`}>🌟</span>
+              ))}
+            </div>
+            <div className="h-3 w-[1px] bg-white/10"></div>
+            <div className="text-[9px] font-bold text-white/60 uppercase tracking-widest">
+              {next ? (
+                <span className="animate-pulse">
+                  {lang === 'ar' 
+                    ? `بقي لك ${Math.ceil(next.time - readingTime/60)} دقيقة للنجمة ${next.stars}.. استمر` 
+                    : `${Math.ceil(next.time - readingTime/60)} mins left for Star ${next.stars}.. Keep going`}
+                </span>
+              ) : (
+                <span>{lang === 'ar' ? 'وصلت للقمة المعرفية!' : 'Peak Knowledge Reached!'}</span>
+              )}
+            </div>
+          </div>
+
           {/* أدوات الزوم */}
           <div className="flex items-center bg-white/5 rounded-lg border border-white/10 overflow-hidden">
             <button 
