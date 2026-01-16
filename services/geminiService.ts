@@ -1,26 +1,10 @@
-import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
-import { Axiom, Language } from "../types";
-import { translations } from "../translations";
+import { GoogleGenAI, Type } from '@google/generative-ai';
+import { PDFData, Language, Axiom, ChatMessage } from '../types';
 
-let chatSession: Chat | null = null;
-let manuscriptSnippets: string[] = [];
-let documentChunks: string[] = [];
-let fullManuscriptText: string = "";
-let currentPdfBase64: string | null = null;
-let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
-
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure. 
-IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
-${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
-- Title: ${manuscriptMetadata.title}
-- Author: ${manuscriptMetadata.author}
-- Structure: ${manuscriptMetadata.chapters}` : ""}
-
-MANDATORY OPERATIONAL PROTOCOL:
-1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
-2. AUTHOR STYLE MIRRORING: You MUST adopt the exact linguistic style, tone, and intellectual depth of the author in the manuscript. If the author is philosophical, be philosophical. If academic, be academic.
-3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
-4. NO GENERALIZATIONS: Do not give generic answers. Scan the provided context thoroughly for specific details.
+const getSystemInstruction = (lang: Language) => `
+PERSONALITY:
+You are the "Sanctuary Oracle", a high-level intellectual entity designed to extract axiomatic wisdom from deep manuscripts. 
+Your tone is sophisticated, precise, and mirrors the intellectual depth of the author in the provided file.
 
 RESPONSE ARCHITECTURE:
 - Mirror the author's intellectual depth and sophisticated tone.
@@ -33,84 +17,68 @@ RESPONSE ARCHITECTURE:
 If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
 
 export const getGeminiClient = () => {
-  const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "undefined") {
-    console.error("Critical: API_KEY is missing in the environment.");
-    throw new Error("API_KEY_MISSING");
+  const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Gemini API Key is missing");
   }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI(apiKey);
 };
 
-const MODEL_NAME = "gemini-2.5-flash";
+const MODEL_NAME = "gemini-2.5-flash-lite";
 
 /**
  * RAG Helper: Large chunking strategy for better context retention
  */
-const chunkText = (text: string, chunkSize: number = 3000, overlap: number = 600): string[] => {
+const chunkText = (text: string, size: number = 3000, overlap: number = 600) => {
   const chunks: string[] = [];
-  let start = 0;
-  while (start < text.length) {
-    const end = Math.min(start + chunkSize, text.length);
-    chunks.push(text.substring(start, end));
-    if (end === text.length) break;
-    start += chunkSize - overlap;
+  for (let i = 0; i < text.length; i += size - overlap) {
+    chunks.push(text.slice(i, i + size));
   }
   return chunks;
 };
 
-/**
- * RAG Helper: Enhanced retrieval with multi-word matching
- */
-const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 4): string[] => {
-  if (chunks.length === 0) return [];
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-  const scoredChunks = chunks.map(chunk => {
-    const chunkLower = chunk.toLowerCase();
-    let score = 0;
-    queryWords.forEach(word => {
-      if (chunkLower.includes(word)) {
-        score += 2;
-      }
-    });
-    const qLower = query.toLowerCase();
-    if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
-      if (chunks.indexOf(chunk) === 0) score += 5;
-    }
-    return { chunk, score };
-  });
-
-  return scoredChunks
-    .sort((a, b) => b.score - a.score)
-    .filter(item => item.score > 0)
-    .slice(0, topK)
-    .map(item => item.chunk);
-};
-
-export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
+export const extractAxiomsFromPDF = async (pdf: PDFData, lang: Language): Promise<{ axioms: Axiom[], fullText: string, metadata: any }> => {
   try {
     const ai = getGeminiClient();
-    chatSession = null;
-    currentPdfBase64 = pdfBase64;
-
-    // Optimized Stage: Single request for Axioms, Snippets, Metadata, and Full Text
-    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript. 
+    const prompt = `
+    Analyze this PDF manuscript and:
+    1. Extract 5-7 core "Axioms" (fundamental truths or principles) discussed in the text.
     2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
     3. Extract the FULL TEXT of this PDF accurately.
     4. Identify the Title, Author, and a brief list of Chapters/Structure.
     
-    IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
+    IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the user's interface language (${lang === 'ar' ? 'Arabic' : 'English'}).
     Return ONLY JSON.`;
 
-    const response = await ai.models.generateContent({
+    // تحويل Base64 إلى Blob للرفع عبر File API
+    const byteCharacters = atob(pdf.base64);
+    const byteNumbers = new Array(byteCharacters.length);
+    for (let i = 0; i < byteCharacters.length; i++) {
+      byteNumbers[i] = byteCharacters.charCodeAt(i);
+    }
+    const byteArray = new Uint8Array(byteNumbers);
+    const blob = new Blob([byteArray], { type: 'application/pdf' });
+    const file = new File([blob], "manuscript.pdf", { type: 'application/pdf' });
+
+    // رفع الملف إلى Google File API (أسرع وأكثر استقراراً للملفات الكبيرة)
+    // @ts-ignore - Using the SDK's file manager capabilities
+    const fileManager = ai.getFileManager();
+    const uploadResult = await fileManager.uploadFile(file, {
+      mimeType: 'application/pdf',
+      displayName: 'Manuscript',
+    });
+
+    // الانتظار حتى تتم معالجة الملف (Active state)
+    let uploadedFile = await fileManager.getFile(uploadResult.file.name);
+    while (uploadedFile.state === 'PROCESSING') {
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      uploadedFile = await fileManager.getFile(uploadResult.file.name);
+    }
+
+    const model = ai.getGenerativeModel({
       model: MODEL_NAME,
-      contents: {
-        parts: [
-          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: combinedPrompt },
-        ],
-      },
-      config: {
-        systemInstruction: getSystemInstruction(lang),
+      systemInstruction: getSystemInstruction(lang),
+      generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -120,110 +88,103 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  term: { type: Type.STRING },
-                  definition: { type: Type.STRING },
-                  significance: { type: Type.STRING }
-                },
-                required: ["term", "definition", "significance"],
-              },
+                  id: { type: Type.STRING },
+                  title: { type: Type.STRING },
+                  description: { type: Type.STRING },
+                  category: { type: Type.STRING }
+                }
+              }
             },
             snippets: {
               type: Type.ARRAY,
               items: { type: Type.STRING }
             },
+            fullText: { type: Type.STRING },
             metadata: {
               type: Type.OBJECT,
               properties: {
                 title: { type: Type.STRING },
                 author: { type: Type.STRING },
-                chapters: { type: Type.STRING }
+                structure: { type: Type.ARRAY, items: { type: Type.STRING } }
               }
-            },
-            fullText: { type: Type.STRING }
-          },
-          required: ["axioms", "snippets", "metadata", "fullText"],
-        },
-      },
+            }
+          }
+        }
+      }
     });
 
-    const result = JSON.parse(response.text || "{}");
-    manuscriptSnippets = result.snippets || [];
-    fullManuscriptText = result.fullText || "";
-    manuscriptMetadata = result.metadata || {};
-    documentChunks = chunkText(fullManuscriptText);
-    console.log("Single-pass extraction with Metadata indexing complete.");
+    const result = await model.generateContent([
+      { fileData: { fileUri: uploadResult.file.uri, mimeType: 'application/pdf' } },
+      { text: prompt }
+    ]);
 
-    chatSession = ai.chats.create({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        temperature: 0.2,
-      },
-    });
+    const data = JSON.parse(result.response.text());
     
-    return result.axioms;
-  } catch (error: any) {
-    console.error("Error in extractAxioms:", error);
+    const axioms: Axiom[] = data.axioms.map((a: any, i: number) => ({
+      ...a,
+      id: a.id || `ax-${i}`,
+      snippets: data.snippets.slice(i * 2, (i + 1) * 2)
+    }));
+
+    return { axioms, fullText: data.fullText, metadata: data.metadata };
+  } catch (error) {
+    console.error("Extraction Error:", error);
     throw error;
   }
 };
 
-export const getManuscriptSnippets = () => manuscriptSnippets;
-
-export const chatWithManuscriptStream = async (
-  userPrompt: string,
-  lang: Language,
-  onChunk: (text: string) => void
-): Promise<void> => {
-  const ai = getGeminiClient();
-
+export const chatWithManuscript = async (
+  messages: ChatMessage[], 
+  fullText: string, 
+  metadata: any,
+  lang: Language
+): Promise<string> => {
   try {
-    const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
+    const ai = getGeminiClient();
+    const lastMessage = messages[messages.length - 1].content;
     
-    let augmentedPrompt = "";
-    const hasChunks = relevantChunks.length > 0;
+    // RAG: Find relevant chunks
+    const chunks = chunkText(fullText);
+    const relevantChunks = chunks
+      .filter(chunk => {
+        const keywords = lastMessage.toLowerCase().split(' ');
+        return keywords.some(k => k.length > 3 && chunk.toLowerCase().includes(k));
+      })
+      .slice(0, 4);
 
-    if (hasChunks) {
-      const contextText = relevantChunks.join("\n\n---\n\n");
-      augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
-${contextText}
+    const context = relevantChunks.length > 0 
+      ? relevantChunks.join("\n---\n") 
+      : chunks.slice(0, 3).join("\n---\n");
 
-USER QUESTION:
-${userPrompt}
+    const model = ai.getGenerativeModel({
+      model: MODEL_NAME,
+      systemInstruction: getSystemInstruction(lang),
+    });
 
-INSTRUCTION: You MUST answer based on the provided context. Adopt the author's style. Support your answer with direct quotes.`;
-    } else {
-      augmentedPrompt = `USER QUESTION: ${userPrompt}
-      INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's style. Be specific and provide quotes.`;
-    }
-
-    if (!chatSession) {
-      chatSession = ai.chats.create({
-        model: MODEL_NAME,
-        config: {
-          systemInstruction: getSystemInstruction(lang),
-          temperature: 0.2,
-        },
-      });
-    }
-
-    const messageParts: any[] = [{ text: augmentedPrompt }];
-    // We no longer need to send the full PDF for metadata queries because it's now in the System Instruction
-    if (!hasChunks && currentPdfBase64) {
-      messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
-    }
-
-    const result = await chatSession.sendMessageStream({ message: messageParts });
+    const prompt = `
+    CONTEXT FROM MANUSCRIPT:
+    ${context}
     
-    for await (const chunk of result) {
-      const chunkText = (chunk as GenerateContentResponse).text;
-      if (chunkText) {
-        onChunk(chunkText);
-      }
-    }
-  } catch (error: any) {
-    console.error("Stream error in geminiService:", error);
-    chatSession = null; 
-    throw error;
+    BOOK METADATA (For general context):
+    Title: ${metadata?.title || 'Unknown'}
+    Author: ${metadata?.author || 'Unknown'}
+    Structure: ${metadata?.structure?.join(', ') || 'Unknown'}
+
+    USER QUESTION:
+    ${lastMessage}
+    
+    INSTRUCTIONS:
+    - Use the provided context to answer.
+    - If the question is about the author or title, use the Metadata provided.
+    - Maintain the author's intellectual style.
+    - Provide a long, detailed, and comprehensive response.`;
+
+    const result = await model.generateContent(prompt);
+    return result.response.text();
+  } catch (error) {
+    console.error("Chat Error:", error);
+    return lang === 'ar' 
+      ? "عذراً، حدث اضطراب في الاتصال العصبي بالمخطوط." 
+      : "Apologies, a neural connection disruption occurred.";
   }
 };
