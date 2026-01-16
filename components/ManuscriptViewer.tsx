@@ -187,16 +187,21 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
               ))}
             </div>
             <div className="h-3 w-[1px] bg-white/10"></div>
-            <div className="text-[9px] font-bold text-white/60 uppercase tracking-widest">
-              {next ? (
-                <span className="animate-pulse">
-                  {lang === 'ar' 
-                    ? `بقي لك ${Math.ceil(next.time - readingTime/60)} دقيقة للنجمة ${next.stars}.. استمر` 
-                    : `${Math.ceil(next.time - readingTime/60)} mins left for Star ${next.stars}.. Keep going`}
-                </span>
-              ) : (
-                <span>{lang === 'ar' ? 'وصلت للقمة المعرفية!' : 'Peak Knowledge Reached!'}</span>
-              )}
+            <div className="flex flex-col items-start">
+              <div className="text-[8px] font-black text-orange-500/80 uppercase tracking-widest mb-0.5">
+                {lang === 'ar' ? 'وقت المطالعة:' : 'Reading Time:'} {Math.floor(readingTime / 60)} {lang === 'ar' ? 'د' : 'm'}
+              </div>
+              <div className="text-[7px] font-bold text-white/40 uppercase tracking-[0.2em]">
+                {next ? (
+                  <span className="animate-pulse">
+                    {lang === 'ar' 
+                      ? `بقي ${Math.ceil(next.time - readingTime/60)} د للنجمة ${next.stars}` 
+                      : `${Math.ceil(next.time - readingTime/60)}m to Star ${next.stars}`}
+                  </span>
+                ) : (
+                  <span>{lang === 'ar' ? 'القمة المعرفية' : 'Peak Knowledge'}</span>
+                )}
+              </div>
             </div>
           </div>
 
