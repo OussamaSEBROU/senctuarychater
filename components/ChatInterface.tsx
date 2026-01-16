@@ -23,10 +23,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
-  // --- Typing Speed Configuration ---
-  const typingSpeed = 30; // Change this value to adjust speed (ms per character)
-  // ----------------------------------
-
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
@@ -57,9 +53,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
     }
   };
 
-  useEffect(() => {
-    handleAutoScroll();
-  }, [messages, isLoading]);
+  // تم إيقاف التمرير التلقائي للسماح للمستخدم بالتحكم اليدوي الكامل أثناء توليد النص
+  // useEffect(() => {
+  //   handleAutoScroll();
+  // }, [messages, isLoading]);
 
   const isArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
 
@@ -80,31 +77,20 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
     setInput('');
     setIsLoading(true);
 
-    let fullResponse = "";
+    let accumulatedResponse = "";
 
     try {
       await chatWithManuscriptStream(userText, lang, (chunk) => {
-        fullResponse += chunk;
+        accumulatedResponse += chunk;
+        setMessages(prev => {
+          const newMessages = [...prev];
+          newMessages[newMessages.length - 1] = { 
+            role: 'model', 
+            content: accumulatedResponse 
+          };
+          return newMessages;
+        });
       });
-
-      let currentIndex = 0;
-      const typingInterval = setInterval(() => {
-        if (currentIndex < fullResponse.length) {
-          currentIndex++;
-          setMessages(prev => {
-            const newMessages = [...prev];
-            newMessages[newMessages.length - 1] = { 
-              role: 'model', 
-              content: fullResponse.substring(0, currentIndex)
-            };
-            return newMessages;
-          });
-        } else {
-          clearInterval(typingInterval);
-          setIsLoading(false);
-        }
-      }, typingSpeed);
-
     } catch (error) {
       console.error("Stream error:", error);
       setMessages(prev => {
@@ -115,6 +101,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
         };
         return newMessages;
       });
+    } finally {
       setIsLoading(false);
     }
   };
