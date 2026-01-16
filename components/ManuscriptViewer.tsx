@@ -170,73 +170,52 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         </div>
       )}
 
-      {/* شريط الأدوات العلوي */}
-      <div className="h-12 bg-black/90 border-b border-white/10 flex items-center justify-between px-4 z-30 shrink-0">
-        <div className="flex items-center gap-3">
-          <span className="text-[10px] font-medium text-white/40 truncate max-w-[100px] md:max-w-xs">
+      {/* شريط الأدوات العلوي - تم إعادة تصميمه لضمان ظهور العداد والنجوم في المنتصف */}
+      <div className="h-14 bg-black/95 border-b border-white/10 flex flex-col z-30 shrink-0">
+        <div className="flex items-center justify-between px-3 h-8 border-b border-white/5">
+          <span className="text-[9px] font-medium text-white/30 truncate max-w-[150px]">
             {pdf.name}
           </span>
+          <div className="flex items-center gap-2">
+             {/* أدوات الزوم مصغرة */}
+             <div className="flex items-center bg-white/5 rounded-md border border-white/10 overflow-hidden h-5">
+                <button onClick={() => handleZoom(-0.2)} className="px-1.5 text-white/40 hover:text-white"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg></button>
+                <span className="text-[8px] font-mono text-white/40 px-1 border-x border-white/10">{Math.round(zoom * 100)}%</span>
+                <button onClick={() => handleZoom(0.2)} className="px-1.5 text-white/40 hover:text-white"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg></button>
+             </div>
+             {/* رقم الصفحة */}
+             {!loading && !error && (
+                <div className="flex items-center gap-1 text-[9px] text-white/40">
+                  <span className="text-white font-bold">{currentPage}</span>
+                  <span className="opacity-30">/</span>
+                  <span>{numPages}</span>
+                </div>
+             )}
+          </div>
         </div>
         
-        <div className="flex items-center gap-3 md:gap-6">
-          {/* عداد النجوم والوقت */}
-          <div className="hidden md:flex items-center gap-3 px-3 py-1 bg-white/5 rounded-full border border-white/10">
+        {/* منطقة التحفيز والنجوم - تظهر في المنتصف تماماً كما في الصورة */}
+        <div className="flex-1 flex items-center justify-center px-4 bg-gradient-to-r from-transparent via-white/5 to-transparent">
+          <div className="flex items-center gap-3">
             <div className="flex gap-0.5">
               {Array.from({ length: 6 }).map((_, i) => (
-                <span key={i} className={`text-xs ${i < stars ? 'grayscale-0' : 'grayscale opacity-20'}`}>🌟</span>
+                <span key={i} className={`text-xs transition-all duration-500 ${i < stars ? 'scale-110 drop-shadow-[0_0_5px_rgba(255,165,0,0.8)]' : 'grayscale opacity-10 scale-90'}`}>🌟</span>
               ))}
             </div>
-            <div className="h-3 w-[1px] bg-white/10"></div>
-            <div className="flex flex-col items-start">
-              <div className="text-[8px] font-black text-orange-500/80 uppercase tracking-widest mb-0.5">
-                {lang === 'ar' ? 'وقت المطالعة:' : 'Reading Time:'} {Math.floor(readingTime / 60)} {lang === 'ar' ? 'د' : 'm'}
-              </div>
-              <div className="text-[7px] font-bold text-white/40 uppercase tracking-[0.2em]">
-                {next ? (
-                  <span className="animate-pulse">
-                    {lang === 'ar' 
-                      ? `بقي ${Math.ceil(next.time - readingTime/60)} د للنجمة ${next.stars}` 
-                      : `${Math.ceil(next.time - readingTime/60)}m to Star ${next.stars}`}
+            <div className="h-4 w-[1px] bg-white/10"></div>
+            <div className="flex flex-col justify-center">
+              <div className="flex items-center gap-1.5">
+                <span className="text-[9px] font-black text-orange-500 uppercase tracking-tighter">
+                  {Math.floor(readingTime / 60)} {lang === 'ar' ? 'دقيقة مطالعة' : 'mins read'}
+                </span>
+                {next && (
+                  <span className="text-[8px] font-bold text-white/40 animate-pulse">
+                    • {lang === 'ar' ? `بقي ${Math.ceil(next.time - readingTime/60)}د للنجمة ${next.stars}` : `${Math.ceil(next.time - readingTime/60)}m to Star ${next.stars}`}
                   </span>
-                ) : (
-                  <span>{lang === 'ar' ? 'القمة المعرفية' : 'Peak Knowledge'}</span>
                 )}
               </div>
             </div>
           </div>
-
-          {/* أدوات الزوم */}
-          <div className="flex items-center bg-white/5 rounded-lg border border-white/10 overflow-hidden">
-            <button 
-              type="button"
-              onClick={() => handleZoom(-0.2)} 
-              className="p-2 hover:bg-white/10 text-white/60 active:text-orange-500 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg>
-            </button>
-            <span className="text-[10px] font-mono text-white/40 px-2 min-w-[45px] text-center">{Math.round(zoom * 100)}%</span>
-            <button 
-              type="button"
-              onClick={() => handleZoom(0.2)} 
-              className="p-2 hover:bg-white/10 text-white/60 active:text-orange-500 transition-colors"
-            >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg>
-            </button>
-          </div>
-
-          {/* الانتقال لصفحة */}
-          {!loading && !error && (
-            <form onSubmit={goToPage} className="flex items-center gap-2">
-              <input 
-                type="number" 
-                value={jumpPage}
-                onChange={(e) => setJumpPage(e.target.value)}
-                placeholder={currentPage.toString()}
-                className="w-12 bg-white/5 border border-white/10 rounded px-2 py-1 text-[10px] text-white text-center focus:outline-none focus:border-orange-500 transition-colors"
-              />
-              <span className="text-[10px] text-white/20 uppercase font-black tracking-tighter">/ {numPages}</span>
-            </form>
-          )}
         </div>
       </div>
 
