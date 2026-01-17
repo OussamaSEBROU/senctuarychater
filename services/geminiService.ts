@@ -24,7 +24,6 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.0-flash";
 
-// تحسين الـ Chunking لتقليل الـ Tokens
 const chunkText = (text: string, size: number = 2000, overlap: number = 200) => {
   const chunks: string[] = [];
   for (let i = 0; i < text.length; i += size - overlap) {
@@ -33,7 +32,6 @@ const chunkText = (text: string, size: number = 2000, overlap: number = 200) => 
   return chunks;
 };
 
-// آلية إعادة المحاولة (Exponential Backoff)
 const fetchWithRetry = async (fn: () => Promise<any>, retries: number = 3, delay: number = 1000): Promise<any> => {
   try {
     return await fn();
@@ -116,8 +114,6 @@ export const chatWithManuscriptStream = async (
 ): Promise<void> => {
   try {
     const ai = getGeminiClient();
-    
-    // تحسين البحث في السياق (Semantic-ish Search)
     const chunks = chunkText(cachedFullText);
     const keywords = userMessage.toLowerCase().split(/\s+/).filter(k => k.length > 3);
     
@@ -128,7 +124,7 @@ export const chatWithManuscriptStream = async (
       })
       .filter(item => item.score > 0)
       .sort((a, b) => b.score - a.score)
-      .slice(0, 3) // تقليل عدد الـ Chunks لتوفير الـ Tokens
+      .slice(0, 3)
       .map(item => item.chunk);
 
     const context = relevantChunks.length > 0 ? relevantChunks.join("\n---\n") : chunks.slice(0, 2).join("\n---\n");
