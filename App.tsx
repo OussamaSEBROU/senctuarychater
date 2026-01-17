@@ -179,7 +179,7 @@ const App: React.FC = () => {
             )}
           </div>
         )}
-        {showViewer && pdf && <ManuscriptViewer pdf={pdf} onClose={() => setShowViewer(false)} />}
+        {showViewer && pdf && <ManuscriptViewer pdf={pdf} lang={lang} onClose={() => setShowViewer(false)} />}
       </main>
     </div>
   );
