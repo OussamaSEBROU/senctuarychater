@@ -6,6 +6,7 @@ import { translations } from '../translations';
 interface ManuscriptViewerProps {
   pdf: PDFData;
   lang: Language;
+  onClose: () => void;
 }
 
 export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang }) => {
