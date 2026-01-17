@@ -1,5 +1,5 @@
 import { GoogleGenAI, Type } from '@google/generative-ai';
-import { PDFData, Language, Axiom, ChatMessage } from '../types';
+import { PDFData, Language, Axiom } from '../types';
 
 const getSystemInstruction = (lang: Language) => `
 PERSONALITY:
@@ -24,7 +24,7 @@ export const getGeminiClient = () => {
   return new GoogleGenAI(apiKey);
 };
 
-const MODEL_NAME = "gemini-2.5-flash-lite";
+const MODEL_NAME = "gemini-2.0-flash"; // استخدام النسخة الأسرع والأحدث
 
 /**
  * RAG Helper: Large chunking strategy for better context retention
@@ -37,44 +37,16 @@ const chunkText = (text: string, size: number = 3000, overlap: number = 600) => 
   return chunks;
 };
 
-export const extractAxiomsFromPDF = async (pdf: PDFData, lang: Language): Promise<{ axioms: Axiom[], fullText: string, metadata: any }> => {
+// متغيرات لتخزين البيانات المستخرجة لاستخدامها في الدردشة
+let cachedFullText = "";
+let cachedMetadata: any = null;
+let cachedSnippets: string[] = [];
+
+export const getManuscriptSnippets = () => cachedSnippets;
+
+export const extractAxioms = async (base64: string, lang: Language): Promise<Axiom[]> => {
   try {
     const ai = getGeminiClient();
-    const prompt = `
-    Analyze this PDF manuscript and:
-    1. Extract 5-7 core "Axioms" (fundamental truths or principles) discussed in the text.
-    2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-    3. Extract the FULL TEXT of this PDF accurately.
-    4. Identify the Title, Author, and a brief list of Chapters/Structure.
-    
-    IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the user's interface language (${lang === 'ar' ? 'Arabic' : 'English'}).
-    Return ONLY JSON.`;
-
-    // تحويل Base64 إلى Blob للرفع عبر File API
-    const byteCharacters = atob(pdf.base64);
-    const byteNumbers = new Array(byteCharacters.length);
-    for (let i = 0; i < byteCharacters.length; i++) {
-      byteNumbers[i] = byteCharacters.charCodeAt(i);
-    }
-    const byteArray = new Uint8Array(byteNumbers);
-    const blob = new Blob([byteArray], { type: 'application/pdf' });
-    const file = new File([blob], "manuscript.pdf", { type: 'application/pdf' });
-
-    // رفع الملف إلى Google File API (أسرع وأكثر استقراراً للملفات الكبيرة)
-    // @ts-ignore - Using the SDK's file manager capabilities
-    const fileManager = ai.getFileManager();
-    const uploadResult = await fileManager.uploadFile(file, {
-      mimeType: 'application/pdf',
-      displayName: 'Manuscript',
-    });
-
-    // الانتظار حتى تتم معالجة الملف (Active state)
-    let uploadedFile = await fileManager.getFile(uploadResult.file.name);
-    while (uploadedFile.state === 'PROCESSING') {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      uploadedFile = await fileManager.getFile(uploadResult.file.name);
-    }
-
     const model = ai.getGenerativeModel({
       model: MODEL_NAME,
       systemInstruction: getSystemInstruction(lang),
@@ -88,11 +60,11 @@ export const extractAxiomsFromPDF = async (pdf: PDFData, lang: Language): Promis
               items: {
                 type: Type.OBJECT,
                 properties: {
-                  id: { type: Type.STRING },
-                  title: { type: Type.STRING },
-                  description: { type: Type.STRING },
-                  category: { type: Type.STRING }
-                }
+                  term: { type: Type.STRING },
+                  definition: { type: Type.STRING },
+                  significance: { type: Type.STRING }
+                },
+                required: ["term", "definition", "significance"]
               }
             },
             snippets: {
@@ -113,44 +85,58 @@ export const extractAxiomsFromPDF = async (pdf: PDFData, lang: Language): Promis
       }
     });
 
+    const prompt = `
+    Analyze this PDF manuscript and:
+    1. Extract 6 core "Knowledge Axioms" (fundamental truths or principles) discussed in the text.
+    2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
+    3. Extract the FULL TEXT of this PDF accurately.
+    4. Identify the Title, Author, and a brief list of Chapters/Structure.
+    
+    IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the user's interface language (${lang === 'ar' ? 'Arabic' : 'English'}).
+    Return ONLY JSON.`;
+
+    // إرسال الملف كـ Inline Data لتسريع العملية وتجنب File API للملفات العادية
     const result = await model.generateContent([
-      { fileData: { fileUri: uploadResult.file.uri, mimeType: 'application/pdf' } },
+      {
+        inlineData: {
+          data: base64,
+          mimeType: 'application/pdf'
+        }
+      },
       { text: prompt }
     ]);
 
-    const data = JSON.parse(result.response.text());
+    const responseText = result.response.text();
+    const data = JSON.parse(responseText);
     
-    const axioms: Axiom[] = data.axioms.map((a: any, i: number) => ({
-      ...a,
-      id: a.id || `ax-${i}`,
-      snippets: data.snippets.slice(i * 2, (i + 1) * 2)
-    }));
+    // تخزين البيانات للاستخدام اللاحق
+    cachedFullText = data.fullText || "";
+    cachedMetadata = data.metadata || null;
+    cachedSnippets = data.snippets || [];
 
-    return { axioms, fullText: data.fullText, metadata: data.metadata };
+    return data.axioms || [];
   } catch (error) {
     console.error("Extraction Error:", error);
     throw error;
   }
 };
 
-export const chatWithManuscript = async (
-  messages: ChatMessage[], 
-  fullText: string, 
-  metadata: any,
-  lang: Language
-): Promise<string> => {
+export const chatWithManuscriptStream = async (
+  userMessage: string,
+  lang: Language,
+  onChunk: (chunk: string) => void
+): Promise<void> => {
   try {
     const ai = getGeminiClient();
-    const lastMessage = messages[messages.length - 1].content;
     
-    // RAG: Find relevant chunks
-    const chunks = chunkText(fullText);
+    // RAG: البحث عن الأجزاء ذات الصلة
+    const chunks = chunkText(cachedFullText);
     const relevantChunks = chunks
       .filter(chunk => {
-        const keywords = lastMessage.toLowerCase().split(' ');
+        const keywords = userMessage.toLowerCase().split(' ');
         return keywords.some(k => k.length > 3 && chunk.toLowerCase().includes(k));
       })
-      .slice(0, 4);
+      .slice(0, 5);
 
     const context = relevantChunks.length > 0 
       ? relevantChunks.join("\n---\n") 
@@ -165,26 +151,29 @@ export const chatWithManuscript = async (
     CONTEXT FROM MANUSCRIPT:
     ${context}
     
-    BOOK METADATA (For general context):
-    Title: ${metadata?.title || 'Unknown'}
-    Author: ${metadata?.author || 'Unknown'}
-    Structure: ${metadata?.structure?.join(', ') || 'Unknown'}
+    BOOK METADATA:
+    Title: ${cachedMetadata?.title || 'Unknown'}
+    Author: ${cachedMetadata?.author || 'Unknown'}
+    Structure: ${cachedMetadata?.structure?.join(', ') || 'Unknown'}
 
     USER QUESTION:
-    ${lastMessage}
+    ${userMessage}
     
     INSTRUCTIONS:
     - Use the provided context to answer.
-    - If the question is about the author or title, use the Metadata provided.
     - Maintain the author's intellectual style.
     - Provide a long, detailed, and comprehensive response.`;
 
-    const result = await model.generateContent(prompt);
-    return result.response.text();
+    const result = await model.generateContentStream(prompt);
+
+    for await (const chunk of result.stream) {
+      const chunkText = chunk.text();
+      onChunk(chunkText);
+    }
   } catch (error) {
-    console.error("Chat Error:", error);
-    return lang === 'ar' 
+    console.error("Chat Stream Error:", error);
+    onChunk(lang === 'ar' 
       ? "عذراً، حدث اضطراب في الاتصال العصبي بالمخطوط." 
-      : "Apologies, a neural connection disruption occurred.";
+      : "Apologies, a neural connection disruption occurred.");
   }
 };
