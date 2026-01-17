@@ -4,7 +4,7 @@ import { extractAxioms } from './services/geminiService';
 import AxiomCard from './components/AxiomCard';
 import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
-import ManuscriptViewer from './components/ManuscriptViewer';
+import { ManuscriptViewer } from './components/ManuscriptViewer';
 import { translations } from './translations';
 
 const quotes = {
