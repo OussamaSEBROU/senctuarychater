@@ -1,4 +1,4 @@
-import { GoogleGenAI, Type } from '@google/generative-ai';
+import { GoogleGenerativeAI, SchemaType } from '@google/generative-ai';
 import { PDFData, Language, Axiom } from '../types';
 
 const getSystemInstruction = (lang: Language) => `
@@ -19,7 +19,7 @@ export const getGeminiClient = () => {
   if (!apiKey) {
     throw new Error("Gemini API Key is missing");
   }
-  return new GoogleGenAI(apiKey);
+  return new GoogleGenerativeAI(apiKey);
 };
 
 const MODEL_NAME = "gemini-2.0-flash";
@@ -61,31 +61,31 @@ export const extractAxioms = async (base64: string, lang: Language): Promise<Axi
       generationConfig: {
         responseMimeType: "application/json",
         responseSchema: {
-          type: Type.OBJECT,
+          type: SchemaType.OBJECT,
           properties: {
             axioms: {
-              type: Type.ARRAY,
+              type: SchemaType.ARRAY,
               items: {
-                type: Type.OBJECT,
+                type: SchemaType.OBJECT,
                 properties: {
-                  term: { type: Type.STRING },
-                  definition: { type: Type.STRING },
-                  significance: { type: Type.STRING }
+                  term: { type: SchemaType.STRING },
+                  definition: { type: SchemaType.STRING },
+                  significance: { type: SchemaType.STRING }
                 },
                 required: ["term", "definition", "significance"]
               }
             },
             snippets: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
+              type: SchemaType.ARRAY,
+              items: { type: SchemaType.STRING }
             },
-            fullText: { type: Type.STRING },
+            fullText: { type: SchemaType.STRING },
             metadata: {
-              type: Type.OBJECT,
+              type: SchemaType.OBJECT,
               properties: {
-                title: { type: Type.STRING },
-                author: { type: Type.STRING },
-                structure: { type: Type.ARRAY, items: { type: Type.STRING } }
+                title: { type: SchemaType.STRING },
+                author: { type: SchemaType.STRING },
+                structure: { type: SchemaType.ARRAY, items: { type: SchemaType.STRING } }
               }
             }
           }
