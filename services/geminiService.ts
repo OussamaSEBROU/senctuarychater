@@ -1,3 +1,4 @@
+
 import { GoogleGenAI, Type, Chat, GenerateContentResponse } from "@google/genai";
 import { Axiom, Language } from "../types";
 import { translations } from "../translations";
@@ -19,16 +20,15 @@ ${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
 MANDATORY OPERATIONAL PROTOCOL:
 1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
 2. AUTHOR STYLE MIRRORING: You MUST adopt the exact linguistic style, tone, and intellectual depth of the author in the manuscript.
-3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
+3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript.
 4. NO GENERALIZATIONS: Do not give generic answers. Scan the provided context thoroughly for specific details.
 
-RESPONSE ARCHITECTURE & ADAPTIVE LENGTH:
+RESPONSE ARCHITECTURE:
 - Mirror the author's intellectual depth and sophisticated tone.
-- ADAPTIVE DETAIL: If the user's question is complex, philosophical, or requires deep analysis, provide a COMPREHENSIVE, DETAILED, and ENRICHED response. Expand on concepts and provide thorough explanations.
-- DIRECTNESS: If the question is simple or factual, be concise and direct.
 - Use Markdown: ### for headers, **Bold** for key terms, and LaTeX for formulas.
 - Respond in the SAME language as the user's question.
 - RESPOND DIRECTLY. No introductions or meta-talk.
+- ELABORATE: Provide comprehensive, detailed, and in-depth answers.
 - BE SUPER FAST.
 
 If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
@@ -42,19 +42,16 @@ export const getGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-// Use flash-lite for faster response times if available, otherwise flash
-const MODEL_NAME = "gemini-2.5-flash-lite"; 
+// Use flash-lite for maximum speed
+const MODEL_NAME = "gemini-2.5-flash-lite";
 
-/**
- * RAG Helper: Optimized chunking strategy for token efficiency
- */
-const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250): string[] => {
+const chunkText = (text: string, chunkSize: number = 2000, overlap: number = 300): string[] => {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
     const end = Math.min(start + chunkSize, text.length);
     const chunk = text.substring(start, end);
-    if (chunk.trim().length >= 200) {
+    if (chunk.trim().length >= 100) {
       chunks.push(chunk);
     }
     if (end === text.length) break;
@@ -63,16 +60,16 @@ const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250
   return chunks;
 };
 
-const compressChunk = (text: string, maxLength: number = 600): string => {
+const compressChunk = (text: string, maxLength: number = 800): string => {
   if (text.length <= maxLength) return text;
-  const half = Math.floor(maxLength / 2) - 15;
+  const half = Math.floor(maxLength / 2) - 20;
   return text.substring(0, half) + " [...] " + text.substring(text.length - half);
 };
 
-const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 2): string[] => {
+const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 3): string[] => {
   if (chunks.length === 0) return [];
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  const MIN_SCORE_THRESHOLD = 4;
+  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
+  const MIN_SCORE_THRESHOLD = 2;
 
   const scoredChunks = chunks.map(chunk => {
     const chunkLower = chunk.toLowerCase();
@@ -80,10 +77,6 @@ const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 
     queryWords.forEach(word => {
       if (chunkLower.includes(word)) score += 2;
     });
-    const qLower = query.toLowerCase();
-    if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
-      if (chunks.indexOf(chunk) === 0) score += 5;
-    }
     return { chunk, score };
   });
 
@@ -100,13 +93,12 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Optimized prompt for faster extraction
-    const combinedPrompt = `Extract JSON:
-1. axioms: 13 high-quality Knowledge Axioms.
-2. snippets: 10 verbatim quotes.
-3. fullText: Accurate full text.
-4. metadata: {title, author, chapters}.
-Language must match PDF.`;
+    // Optimized Stage: Request only essential data for faster upload/processing
+    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
+2. Extract 10 short, profound snippets (verbatim).
+3. Extract the FULL TEXT accurately.
+4. Identify Title, Author, and Chapters.
+Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -121,36 +113,7 @@ Language must match PDF.`;
       config: {
         systemInstruction: getSystemInstruction(lang),
         responseMimeType: "application/json",
-        // Speed optimization: lower temperature for faster, more deterministic extraction
-        temperature: 0.1,
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            axioms: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  term: { type: Type.STRING },
-                  definition: { type: Type.STRING },
-                  significance: { type: Type.STRING }
-                },
-                required: ["term", "definition", "significance"],
-              },
-            },
-            snippets: { type: Type.ARRAY, items: { type: Type.STRING } },
-            metadata: {
-              type: Type.OBJECT,
-              properties: {
-                title: { type: Type.STRING },
-                author: { type: Type.STRING },
-                chapters: { type: Type.STRING }
-              }
-            },
-            fullText: { type: Type.STRING }
-          },
-          required: ["axioms", "snippets", "metadata", "fullText"],
-        },
+        // Removed complex schema for faster parsing
       },
     });
 
@@ -164,7 +127,7 @@ Language must match PDF.`;
       model: MODEL_NAME,
       config: {
         systemInstruction: getSystemInstruction(lang),
-        temperature: 0.2,
+        temperature: 0.1, // Lower temperature for faster/more stable output
       },
     });
 
@@ -174,6 +137,8 @@ Language must match PDF.`;
     throw error;
   }
 };
+
+export const getManuscriptSnippets = () => manuscriptSnippets;
 
 export const chatWithManuscriptStream = async (
   userPrompt: string,
@@ -189,16 +154,9 @@ export const chatWithManuscriptStream = async (
 
     if (hasChunks) {
       const contextText = relevantChunks.join("\n\n---\n\n");
-      augmentedPrompt = `CONTEXT:
-${contextText}
-
-USER:
-${userPrompt}
-
-INSTRUCTION: Answer using context. Detailed if complex, concise if simple. Use quotes.`;
+      augmentedPrompt = `CONTEXT:\n${contextText}\n\nUSER:\n${userPrompt}\n\nINSTRUCTION: Answer based on context. Use author's style. Use quotes.`;
     } else {
-      augmentedPrompt = `USER: ${userPrompt}
-INSTRUCTION: Scan manuscript for answer. Detailed if complex, concise if simple. Provide quotes.`;
+      augmentedPrompt = `USER: ${userPrompt}\nINSTRUCTION: Answer based on manuscript. Use author's style. Use quotes.`;
     }
 
     if (!chatSession) {
@@ -206,14 +164,15 @@ INSTRUCTION: Scan manuscript for answer. Detailed if complex, concise if simple.
         model: MODEL_NAME,
         config: {
           systemInstruction: getSystemInstruction(lang),
-          temperature: 0.2,
+          temperature: 0.1,
         },
       });
     }
 
     const messageParts: any[] = [{ text: augmentedPrompt }];
+    // Only send PDF if no chunks found to save bandwidth/latency
     if (!hasChunks && currentPdfBase64) {
-      messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
+      // messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
     }
 
     const result = await chatSession.sendMessageStream({ message: messageParts });
