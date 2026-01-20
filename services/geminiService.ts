@@ -93,7 +93,6 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Optimized Stage: Request only essential data for faster upload/processing
     const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
 2. Extract 10 short, profound snippets (verbatim).
 3. Extract the FULL TEXT accurately.
@@ -113,7 +112,6 @@ Return ONLY JSON.`;
       config: {
         systemInstruction: getSystemInstruction(lang),
         responseMimeType: "application/json",
-        // Removed complex schema for faster parsing
       },
     });
 
@@ -127,7 +125,7 @@ Return ONLY JSON.`;
       model: MODEL_NAME,
       config: {
         systemInstruction: getSystemInstruction(lang),
-        temperature: 0.1, // Lower temperature for faster/more stable output
+        temperature: 0.1,
       },
     });
 
@@ -170,11 +168,6 @@ export const chatWithManuscriptStream = async (
     }
 
     const messageParts: any[] = [{ text: augmentedPrompt }];
-    // Only send PDF if no chunks found to save bandwidth/latency
-    if (!hasChunks && currentPdfBase64) {
-      // messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
-    }
-
     const result = await chatSession.sendMessageStream({ message: messageParts });
 
     for await (const chunk of result) {
