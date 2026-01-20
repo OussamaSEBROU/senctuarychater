@@ -138,12 +138,9 @@ const App: React.FC = () => {
     setFlowStep('axioms');
 
     try {
-      const result = await extractAxioms(base64, currentLang);
-      if (result.axioms && result.axioms.length > 0) {
-        setAxioms(result.axioms);
-        if (result.metadata?.title) {
-          setPdf(prev => prev ? { ...prev, title: result.metadata.title } : null);
-        }
+      const extracted = await extractAxioms(base64, currentLang);
+      if (extracted && extracted.length > 0) {
+        setAxioms(extracted);
       } else {
         throw new Error("EMPTY_RESULT");
       }
@@ -304,31 +301,4 @@ const App: React.FC = () => {
                    >
                      {t.deepChatBtn}
                    </button>
-                </div>
-              )}
-              {flowStep === 'chat' && (
-                <div className="flex-1 bg-[#080808] overflow-hidden">
-                  <ChatInterface pdf={pdf} lang={lang} />
-                </div>
-              )}
-            </div>
-
-            {showViewer && (
-              <div className={`fixed inset-0 lg:relative lg:inset-auto lg:w-1/2 bg-black z-[70] lg:z-10 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)] overflow-hidden`}>
-                <div className="flex lg:hidden items-center justify-between p-4 bg-[#1a1a1a] border-b border-white/10">
-                   <h4 className="text-[10px] font-black tracking-widest uppercase text-white/40">{t.viewer}</h4>
-                   <button onClick={() => setShowViewer(false)} className="p-2 bg-white/5 rounded-full text-white/60">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2.5" strokeLinecap="round"/></svg>
-                   </button>
-                </div>
-                <ManuscriptViewer pdf={pdf} lang={lang} />
-              </div>
-            )}
-          </div>
-        )}
-      </main>
-    </div>
-  );
-};
-
-export default App;
+(Content truncated due to size limit. Use line ranges to read remaining content)
