@@ -43,7 +43,7 @@ export const getGeminiClient = () => {
 };
 
 // Use flash-lite for faster response times if available, otherwise flash
-const MODEL_NAME = "gemini-2.0-flash"; 
+const MODEL_NAME = "gemini-2.5-flash-lite"; 
 
 /**
  * RAG Helper: Optimized chunking strategy for token efficiency
