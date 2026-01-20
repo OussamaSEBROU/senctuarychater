@@ -15,5 +15,4 @@ export interface Message {
 export interface PDFData {
   base64: string;
   name: string;
-  title?: string;
 }
