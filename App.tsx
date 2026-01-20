@@ -138,9 +138,12 @@ const App: React.FC = () => {
     setFlowStep('axioms');
 
     try {
-      const extracted = await extractAxioms(base64, currentLang);
-      if (extracted && extracted.length > 0) {
-        setAxioms(extracted);
+      const result = await extractAxioms(base64, currentLang);
+      if (result.axioms && result.axioms.length > 0) {
+        setAxioms(result.axioms);
+        if (result.metadata?.title) {
+          setPdf(prev => prev ? { ...prev, title: result.metadata.title } : null);
+        }
       } else {
         throw new Error("EMPTY_RESULT");
       }
