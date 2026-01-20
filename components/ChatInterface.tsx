@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkMath from 'remark-math';
@@ -48,15 +49,17 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       const { scrollHeight, clientHeight } = scrollRef.current;
       scrollRef.current.scrollTo({
         top: scrollHeight - clientHeight,
-        behavior: 'smooth'
+        behavior: 'auto' // Changed to 'auto' for faster scrolling during streaming
       });
     }
   };
 
-  // تم إيقاف التمرير التلقائي للسماح للمستخدم بالتحكم اليدوي الكامل أثناء توليد النص
-  // useEffect(() => {
-  //   handleAutoScroll();
-  // }, [messages, isLoading]);
+  // تفعيل التمرير التلقائي السريع أثناء توليد النص
+  useEffect(() => {
+    if (isLoading) {
+      handleAutoScroll();
+    }
+  }, [messages, isLoading]);
 
   const isArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
 
@@ -143,7 +146,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       <div 
         ref={scrollRef} 
         className="flex-1 overflow-y-auto overflow-x-hidden pt-4 md:pt-6 pb-40 touch-auto"
-        style={{ scrollBehavior: 'smooth', WebkitOverflowScrolling: 'touch' }}
+        style={{ scrollBehavior: 'auto', WebkitOverflowScrolling: 'touch' }}
       >
         <div className="max-w-5xl mx-auto w-full px-3 md:px-6 space-y-8">
           {messages.length === 0 && (
@@ -251,37 +254,37 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
             className="group relative flex items-end bg-[#1a1a1a]/80 backdrop-blur-2xl border border-white/10 rounded-[1.5rem] md:rounded-[2rem] overflow-hidden focus-within:border-white/20 transition-all duration-300 shadow-2xl"
           >
             <textarea
-              rows={1}
               value={input}
-              onChange={(e) => {
-                setInput(e.target.value);
-                e.target.style.height = 'auto';
-                e.target.style.height = e.target.scrollHeight + 'px';
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit(e);
+                }
               }}
-              onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
-              placeholder={t.placeholder}
-              className={`w-full bg-transparent px-5 py-4 md:py-5 focus:outline-none text-white text-sm md:text-base resize-none max-h-48 scrollbar-none ${lang === 'ar' ? 'text-right font-academic' : ''}`}
+              placeholder={t.askPlaceholder}
+              className="w-full bg-transparent border-none focus:ring-0 text-white placeholder-white/20 py-4 md:py-6 px-6 md:px-8 text-sm md:text-base resize-none max-h-32 md:max-h-48 scrollbar-none"
+              rows={1}
             />
             <div className="p-2 md:p-3">
-              <button 
-                type="submit" 
-                disabled={isLoading || !input.trim()} 
-                className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-white text-black rounded-xl md:rounded-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-10"
+              <button
+                type="submit"
+                disabled={isLoading || !input.trim()}
+                className={`p-3 md:p-4 rounded-xl md:rounded-2xl transition-all duration-500 ${
+                  input.trim() && !isLoading 
+                    ? 'bg-orange-600 text-white shadow-[0_0_20px_rgba(234,88,12,0.4)] hover:scale-105 active:scale-95' 
+                    : 'bg-white/5 text-white/10'
+                }`}
               >
-                <svg className={`w-5 h-5 md:w-6 md:h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 12h14M12 5l7 7-7 7" />
+                <svg className="w-5 h-5 md:w-6 md:h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M13 5l7 7-7 7M5 5l7 7-7 7" />
                 </svg>
               </button>
             </div>
           </form>
-          <div className="mt-3 text-center flex flex-col items-center gap-1">
-            <p className="text-[10px] md:text-xs text-white/30 uppercase tracking-[0.3em] font-black">
-              Powered by 5Min paper
-            </p>
-            <p className="text-[8px] text-white/10 uppercase tracking-widest font-bold">
-              by Oussama SEBROU
-            </p>
-          </div>
+          <p className="mt-3 text-center text-[8px] md:text-[10px] text-white/10 font-black tracking-[0.2em] uppercase">
+            {t.footerNote}
+          </p>
         </div>
       </div>
     </div>
