@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { PDFData, Language } from '../types';
 import { translations } from '../translations';
@@ -28,6 +27,11 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     }, 1000);
     return () => clearInterval(timer);
   }, []);
+
+  // تصفير العداد عند رفع ملف جديد
+  useEffect(() => {
+    setReadingTime(0);
+  }, [pdf.base64]);
 
   const getStars = (seconds: number) => {
     const mins = seconds / 60;
@@ -177,6 +181,18 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
             {pdf.name}
           </span>
           <div className="flex items-center gap-2">
+             {/* خاصية اذهب إلى الصفحة */}
+             <form onSubmit={goToPage} className="flex items-center bg-white/5 rounded-md border border-white/10 overflow-hidden h-5 px-1">
+                <input 
+                  type="number" 
+                  value={jumpPage}
+                  onChange={(e) => setJumpPage(e.target.value)}
+                  placeholder={lang === 'ar' ? 'صفحة' : 'Page'}
+                  className="bg-transparent text-[8px] text-white w-8 outline-none placeholder:text-white/20"
+                />
+                <button type="submit" className="text-[8px] text-orange-500 font-bold ml-1">GO</button>
+             </form>
+
              {/* أدوات الزوم مصغرة */}
              <div className="flex items-center bg-white/5 rounded-md border border-white/10 overflow-hidden h-5">
                 <button onClick={() => handleZoom(-0.2)} className="px-1.5 text-white/40 hover:text-white"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg></button>
@@ -193,7 +209,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
              )}
           </div>
         </div>
-        
+
         {/* منطقة التحفيز والنجوم - تظهر في المنتصف تماماً كما في الصورة */}
         <div className="flex-1 flex items-center justify-center px-4 bg-gradient-to-r from-transparent via-white/5 to-transparent">
           <div className="flex items-center gap-3">
@@ -238,7 +254,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
              <p className="text-[10px] text-red-500/60 font-black uppercase tracking-widest">{error}</p>
            </div>
         )}
-        
+
         {!loading && !error && Array.from({ length: numPages }, (_, i) => (
           <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center snap-center overflow-auto scrollbar-none">
             <PageRenderer pdfDoc={pdfDocRef.current} pageNum={i + 1} zoom={zoom} />
@@ -272,7 +288,7 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
 
   useEffect(() => {
     if (!isVisible || !pdfDoc || !canvasRef.current) return;
-    
+
     const renderPage = async () => {
       try {
         // إلغاء أي عملية رندر سابقة لنفس الصفحة لتجنب التعارض عند تغيير الزوم بسرعة
@@ -285,13 +301,13 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
         const canvas = canvasRef.current!;
         const context = canvas.getContext('2d');
         if (!context) return;
-        
+
         canvas.height = viewport.height;
         canvas.width = viewport.width;
-        
+
         const renderContext = { canvasContext: context, viewport };
         renderTaskRef.current = page.render(renderContext);
-        
+
         await renderTaskRef.current.promise;
         setIsRendered(true);
       } catch (err: any) {
@@ -333,4 +349,3 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
 };
 
 export default ManuscriptViewer;
-
