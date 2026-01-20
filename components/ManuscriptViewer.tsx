@@ -1,4 +1,3 @@
-
 import React, { useEffect, useRef, useState } from 'react';
 import { PDFData, Language } from '../types';
 import { translations } from '../translations';
@@ -15,19 +14,40 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
   const [error, setError] = useState<string | null>(null);
   const [jumpPage, setJumpPage] = useState<string>('');
   const [zoom, setZoom] = useState<number>(1.0);
-  const [readingTime, setReadingTime] = useState<number>(0); // بالثواني
+  
+  // Cumulative Reading Time Logic
+  const [readingTime, setReadingTime] = useState<number>(0);
   const [showAchievement, setShowAchievement] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
   const pdfDocRef = useRef<any>(null);
+  const renderTaskRef = useRef<any>(null);
   const t = translations[lang];
 
-  // نظام تتبع وقت القراءة والنجوم
+  // Load cumulative time from localStorage on mount or when PDF changes
+  useEffect(() => {
+    if (pdf.title) {
+      const savedTime = localStorage.getItem(`reading_time_${pdf.title}`);
+      setReadingTime(savedTime ? parseInt(savedTime, 10) : 0);
+    }
+  }, [pdf.title]);
+
+  // Save cumulative time to localStorage every 5 seconds or on unmount
   useEffect(() => {
     const timer = setInterval(() => {
-      setReadingTime(prev => prev + 1);
+      setReadingTime(prev => {
+        const newTime = prev + 1;
+        if (pdf.title) {
+          localStorage.setItem(`reading_time_${pdf.title}`, newTime.toString());
+        }
+        return newTime;
+      });
     }, 1000);
-    return () => clearInterval(timer);
-  }, []);
+
+    return () => {
+      clearInterval(timer);
+    };
+  }, [pdf.title]);
 
   const getStars = (seconds: number) => {
     const mins = seconds / 60;
@@ -40,19 +60,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     return 0;
   };
 
-  const getNextMilestone = (seconds: number) => {
-    const mins = seconds / 60;
-    if (mins < 5) return { time: 5, stars: 1 };
-    if (mins < 15) return { time: 15, stars: 2 };
-    if (mins < 40) return { time: 40, stars: 3 };
-    if (mins < 60) return { time: 60, stars: 4 };
-    if (mins < 90) return { time: 90, stars: 5 };
-    if (mins < 120) return { time: 120, stars: 6 };
-    return null;
-  };
-
   const stars = getStars(readingTime);
-  const next = getNextMilestone(readingTime);
 
   useEffect(() => {
     if (stars > 0) {
@@ -87,7 +95,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         setLoading(false);
       } catch (err) {
         console.error("Error loading PDF:", err);
-        setError(lang === 'ar' ? "فشل تحميل المحتوى البصري للمخطوط." : "Failed to load manuscript visual core.");
+        setError(lang === 'ar' ? "فشل تحميل المخطوط" : "Failed to load manuscript.");
         setLoading(false);
       }
     };
@@ -101,236 +109,126 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
     };
   }, [pdf.base64, lang]);
 
-  // مراقبة الصفحة الحالية عند التمرير
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
+  const renderPage = async (pageNum: number) => {
+    if (!pdfDocRef.current || !canvasRef.current) return;
 
-    const handleScroll = () => {
-      const scrollLeft = container.scrollLeft;
-      const width = container.clientWidth;
-      const page = Math.round(scrollLeft / width) + 1;
-      if (page !== currentPage && page > 0 && page <= numPages) {
-        setCurrentPage(page);
+    try {
+      if (renderTaskRef.current) {
+        renderTaskRef.current.cancel();
       }
-    };
 
-    container.addEventListener('scroll', handleScroll);
-    return () => container.removeEventListener('scroll', handleScroll);
-  }, [currentPage, numPages]);
+      const page = await pdfDocRef.current.getPage(pageNum);
+      const viewport = page.getViewport({ scale: 2.0 * zoom });
+      const canvas = canvasRef.current;
+      const context = canvas.getContext('2d');
+      if (!context) return;
 
-  const goToPage = (e: React.FormEvent) => {
+      canvas.height = viewport.height;
+      canvas.width = viewport.width;
+
+      const renderContext = {
+        canvasContext: context,
+        viewport: viewport
+      };
+
+      renderTaskRef.current = page.render(renderContext);
+      await renderTaskRef.current.promise;
+    } catch (err: any) {
+      if (err.name !== 'RenderingCancelledException') {
+        console.error('Error rendering page:', err);
+      }
+    }
+  };
+
+  useEffect(() => {
+    renderPage(currentPage);
+  }, [currentPage, zoom, loading]);
+
+  const handleGoToPage = (e: React.FormEvent) => {
     e.preventDefault();
     const pageNum = parseInt(jumpPage);
-    if (pageNum > 0 && pageNum <= numPages && containerRef.current) {
-      const width = containerRef.current.clientWidth;
-      containerRef.current.scrollTo({
-        left: (pageNum - 1) * width,
-        behavior: 'smooth'
-      });
+    if (pageNum >= 1 && pageNum <= numPages) {
+      setCurrentPage(pageNum);
       setJumpPage('');
     }
   };
 
-  const handleZoom = (delta: number) => {
-    setZoom(prev => {
-      const newZoom = Math.min(Math.max(prev + delta, 0.5), 3.0);
-      return parseFloat(newZoom.toFixed(1));
-    });
-  };
-
   return (
-    <div className="w-full h-full flex flex-col bg-[#050505] overflow-hidden select-none relative">
-      <style>{`
-        @keyframes shine-3d {
-          0% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
-          50% { transform: perspective(1000px) rotateX(10deg) rotateY(10deg) scale(1.1); text-shadow: 0 0 30px rgba(255,165,0,0.8), 0 0 50px rgba(255,165,0,0.4); }
-          100% { transform: perspective(1000px) rotateX(0deg) rotateY(0deg) scale(1); text-shadow: 0 0 10px rgba(255,255,255,0.5); }
-        }
-        .achievement-popup {
-          animation: shine-3d 2s ease-in-out infinite;
-          background: linear-gradient(135deg, rgba(255,255,255,0.1), rgba(255,165,0,0.2));
-          backdrop-filter: blur(10px);
-          border: 1px solid rgba(255,165,0,0.3);
-          box-shadow: 0 20px 50px rgba(0,0,0,0.5), inset 0 0 20px rgba(255,165,0,0.2);
-        }
-      `}</style>
+    <div className="flex flex-col h-full bg-zinc-900 text-white overflow-hidden">
+      {/* Toolbar */}
+      <div className="flex items-center justify-between p-4 bg-zinc-800 border-b border-zinc-700">
+        <div className="flex items-center gap-4">
+          <span className="text-sm font-medium">
+            {lang === 'ar' ? 'الصفحة' : 'Page'} {currentPage} / {numPages}
+          </span>
+          <form onSubmit={handleGoToPage} className="flex items-center gap-2">
+            <input
+              type="number"
+              value={jumpPage}
+              onChange={(e) => setJumpPage(e.target.value)}
+              placeholder={lang === 'ar' ? 'اذهب إلى...' : 'Go to...'}
+              className="w-16 px-2 py-1 text-sm bg-zinc-700 border border-zinc-600 rounded focus:outline-none focus:border-blue-500"
+            />
+            <button type="submit" className="px-3 py-1 text-sm bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+              {lang === 'ar' ? 'انتقال' : 'Go'}
+            </button>
+          </form>
+        </div>
 
-      {/* رسالة الإنجاز السينمائية */}
-      {showAchievement && (
-        <div className="absolute top-20 left-1/2 -translate-x-1/2 z-50 pointer-events-none">
-          <div className="achievement-popup px-8 py-4 rounded-2xl text-center">
-            <h2 className="text-2xl md:text-4xl font-black text-white mb-1 tracking-tighter">
-              {showAchievement}
-            </h2>
-            <p className="text-[10px] uppercase tracking-[0.3em] text-orange-500 font-bold">
-              {lang === 'ar' ? 'إنجاز معرفي جديد' : 'New Knowledge Achievement'}
-            </p>
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 bg-zinc-700 px-3 py-1 rounded-full">
+            <span className="text-xs text-zinc-400">{lang === 'ar' ? 'وقت المطالعة:' : 'Reading Time:'}</span>
+            <span className="text-sm font-bold text-blue-400">{Math.floor(readingTime / 60)}m {readingTime % 60}s</span>
           </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setZoom(prev => Math.max(0.5, prev - 0.1))} className="p-1 hover:bg-zinc-700 rounded">-</button>
+            <span className="text-sm">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => setZoom(prev => Math.min(3, prev + 0.1))} className="p-1 hover:bg-zinc-700 rounded">+</button>
+          </div>
+        </div>
+      </div>
+
+      {/* PDF Viewer Area */}
+      <div ref={containerRef} className="flex-1 overflow-auto p-4 flex justify-center items-start bg-zinc-950">
+        {loading ? (
+          <div className="flex items-center justify-center h-full">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+          </div>
+        ) : error ? (
+          <div className="text-red-500 mt-10">{error}</div>
+        ) : (
+          <div className="relative shadow-2xl">
+            <canvas ref={canvasRef} className="max-w-full h-auto" />
+          </div>
+        )}
+      </div>
+
+      {/* Navigation Controls */}
+      <div className="p-4 bg-zinc-800 border-t border-zinc-700 flex justify-center gap-4">
+        <button
+          disabled={currentPage <= 1}
+          onClick={() => setCurrentPage(prev => prev - 1)}
+          className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-lg transition-colors"
+        >
+          {lang === 'ar' ? 'السابق' : 'Previous'}
+        </button>
+        <button
+          disabled={currentPage >= numPages}
+          onClick={() => setCurrentPage(prev => prev + 1)}
+          className="px-6 py-2 bg-zinc-700 hover:bg-zinc-600 disabled:opacity-50 rounded-lg transition-colors"
+        >
+          {lang === 'ar' ? 'التالي' : 'Next'}
+        </button>
+      </div>
+
+      {/* Achievement Toast */}
+      {showAchievement && (
+        <div className="fixed bottom-20 left-1/2 -translate-x-1/2 bg-blue-600 text-white px-6 py-3 rounded-full shadow-lg animate-bounce z-50">
+          {showAchievement}
         </div>
       )}
-
-      {/* شريط الأدوات العلوي - تم إعادة تصميمه لضمان ظهور العداد والنجوم في المنتصف */}
-      <div className="h-14 bg-black/95 border-b border-white/10 flex flex-col z-30 shrink-0">
-        <div className="flex items-center justify-between px-3 h-8 border-b border-white/5">
-          <span className="text-[9px] font-medium text-white/30 truncate max-w-[150px]">
-            {pdf.name}
-          </span>
-          <div className="flex items-center gap-2">
-             {/* أدوات الزوم مصغرة */}
-             <div className="flex items-center bg-white/5 rounded-md border border-white/10 overflow-hidden h-5">
-                <button onClick={() => handleZoom(-0.2)} className="px-1.5 text-white/40 hover:text-white"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M20 12H4" /></svg></button>
-                <span className="text-[8px] font-mono text-white/40 px-1 border-x border-white/10">{Math.round(zoom * 100)}%</span>
-                <button onClick={() => handleZoom(0.2)} className="px-1.5 text-white/40 hover:text-white"><svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 4v16m8-8H4" /></svg></button>
-             </div>
-             {/* رقم الصفحة */}
-             {!loading && !error && (
-                <div className="flex items-center gap-1 text-[9px] text-white/40">
-                  <span className="text-white font-bold">{currentPage}</span>
-                  <span className="opacity-30">/</span>
-                  <span>{numPages}</span>
-                </div>
-             )}
-          </div>
-        </div>
-        
-        {/* منطقة التحفيز والنجوم - تظهر في المنتصف تماماً كما في الصورة */}
-        <div className="flex-1 flex items-center justify-center px-4 bg-gradient-to-r from-transparent via-white/5 to-transparent">
-          <div className="flex items-center gap-3">
-            <div className="flex gap-0.5">
-              {Array.from({ length: 6 }).map((_, i) => (
-                <span key={i} className={`text-xs transition-all duration-500 ${i < stars ? 'scale-110 drop-shadow-[0_0_5px_rgba(255,165,0,0.8)]' : 'grayscale opacity-10 scale-90'}`}>🌟</span>
-              ))}
-            </div>
-            <div className="h-4 w-[1px] bg-white/10"></div>
-            <div className="flex flex-col justify-center">
-              <div className="flex items-center gap-1.5">
-                <span className="text-[9px] font-black text-orange-500 uppercase tracking-tighter">
-                  {Math.floor(readingTime / 60)} {lang === 'ar' ? 'دقيقة مطالعة' : 'mins read'}
-                </span>
-                {next && (
-                  <span className="text-[8px] font-bold text-white/40 animate-pulse">
-                    • {lang === 'ar' ? `بقي ${Math.ceil(next.time - readingTime/60)}د للنجمة ${next.stars}` : `${Math.ceil(next.time - readingTime/60)}m to Star ${next.stars}`}
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* منطقة عرض الصفحات */}
-      <div 
-        ref={containerRef} 
-        className="flex-1 overflow-x-auto overflow-y-hidden snap-x snap-mandatory bg-black flex flex-row items-center scrollbar-none scroll-smooth relative"
-      >
-        {loading && (
-          <div className="absolute inset-0 flex flex-col items-center justify-center space-y-4 z-50 bg-black">
-            <div className="spinner-arc w-12 h-12 border-t-orange-600"></div>
-            <p className="text-[#a34a28] text-[9px] font-black uppercase tracking-[0.3em] animate-pulse">
-              {lang === 'ar' ? 'جاري الاستحضار...' : 'Summoning...'}
-            </p>
-          </div>
-        )}
-
-        {error && (
-           <div className="absolute inset-0 flex flex-col items-center justify-center p-8 text-center bg-black">
-             <p className="text-[10px] text-red-500/60 font-black uppercase tracking-widest">{error}</p>
-           </div>
-        )}
-        
-        {!loading && !error && Array.from({ length: numPages }, (_, i) => (
-          <div key={i} className="w-full h-full flex-shrink-0 flex items-center justify-center snap-center overflow-auto scrollbar-none">
-            <PageRenderer pdfDoc={pdfDocRef.current} pageNum={i + 1} zoom={zoom} />
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = ({ pdfDoc, pageNum, zoom }) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const [isRendered, setIsRendered] = useState(false);
-  const renderTaskRef = useRef<any>(null);
-
-  useEffect(() => {
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setIsVisible(true);
-        } else {
-          setIsVisible(false);
-        }
-      },
-      { threshold: 0.1, rootMargin: '0px 400px 0px 400px' }
-    );
-    if (canvasRef.current) observer.observe(canvasRef.current);
-    return () => observer.disconnect();
-  }, []);
-
-  useEffect(() => {
-    if (!isVisible || !pdfDoc || !canvasRef.current) return;
-    
-    const renderPage = async () => {
-      try {
-        // إلغاء أي عملية رندر سابقة لنفس الصفحة لتجنب التعارض عند تغيير الزوم بسرعة
-        if (renderTaskRef.current) {
-          renderTaskRef.current.cancel();
-        }
-
-        const page = await pdfDoc.getPage(pageNum);
-        const viewport = page.getViewport({ scale: 2.0 * zoom });
-        const canvas = canvasRef.current!;
-        const context = canvas.getContext('2d');
-        if (!context) return;
-        
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
-        
-        const renderContext = { canvasContext: context, viewport };
-        renderTaskRef.current = page.render(renderContext);
-        
-        await renderTaskRef.current.promise;
-        setIsRendered(true);
-      } catch (err: any) {
-        if (err.name !== 'RenderingCancelledException') {
-          console.error(`Error rendering page ${pageNum}:`, err);
-        }
-      }
-    };
-    renderPage();
-
-    return () => {
-      if (renderTaskRef.current) {
-        renderTaskRef.current.cancel();
-      }
-    };
-  }, [isVisible, pdfDoc, pageNum, zoom]);
-
-  return (
-    <div className="relative flex items-center justify-center min-h-full min-w-full p-2 md:p-4">
-      <div className="relative shadow-2xl bg-white transition-transform duration-300">
-        {!isRendered && (
-          <div className="absolute inset-0 flex items-center justify-center bg-zinc-900">
-             <div className="w-6 h-6 border-2 border-white/5 border-t-white/20 rounded-full animate-spin"></div>
-          </div>
-        )}
-        <canvas 
-          ref={canvasRef} 
-          className={`block object-contain transition-opacity duration-500 ${isRendered ? 'opacity-100' : 'opacity-0'}`}
-          style={{ 
-            width: 'auto', 
-            height: zoom > 1.2 ? 'auto' : 'calc(100vh - 80px)',
-            maxWidth: '100%',
-            maxHeight: zoom > 1.2 ? 'none' : 'calc(100vh - 80px)'
-          }}
-        />
-      </div>
     </div>
   );
 };
 
 export default ManuscriptViewer;
-
