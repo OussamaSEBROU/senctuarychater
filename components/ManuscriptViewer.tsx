@@ -360,4 +360,3 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
 };
 
 export default ManuscriptViewer;
-
