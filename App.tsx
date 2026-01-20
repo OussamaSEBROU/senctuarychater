@@ -206,7 +206,6 @@ const App: React.FC = () => {
         <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-1000">
           <div className="spinner-arc mb-16 w-24 h-24 border-t-orange-600"></div>
           
-          {/* نص الحالة التقنية */}
           <div className="mb-4 h-6">
             <p className="text-orange-500/60 text-[10px] font-black tracking-[0.4em] uppercase animate-pulse">
               {statusMessages[lang][currentStatusIndex]}
@@ -244,7 +243,6 @@ const App: React.FC = () => {
             onClick={() => setShowViewer(!showViewer)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-[10px] font-black tracking-widest uppercase ${showViewer ? 'bg-white border-white text-black' : 'bg-white/5 border-white/5 text-white/40 hover:text-white'}`}
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" /></svg>
             <span className="hidden md:inline">{showViewer ? (lang === 'ar' ? 'إغلاق العارض' : 'Close Viewer') : (lang === 'ar' ? 'فتح المخطوط' : 'Open Manuscript')}</span>
           </button>
         )}
@@ -301,4 +299,31 @@ const App: React.FC = () => {
                    >
                      {t.deepChatBtn}
                    </button>
-(Content truncated due to size limit. Use line ranges to read remaining content)
+                </div>
+              )}
+              {flowStep === 'chat' && (
+                <div className="flex-1 bg-[#080808] overflow-hidden">
+                  <ChatInterface pdf={pdf} lang={lang} />
+                </div>
+              )}
+            </div>
+
+            {showViewer && (
+              <div className={`fixed inset-0 lg:relative lg:inset-auto lg:w-1/2 bg-black z-[70] lg:z-10 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)] overflow-hidden`}>
+                <div className="flex lg:hidden items-center justify-between p-4 bg-[#1a1a1a] border-b border-white/10">
+                   <h4 className="text-[10px] font-black tracking-widest uppercase text-white/40">{t.viewer}</h4>
+                   <button onClick={() => setShowViewer(false)} className="p-2 bg-white/5 rounded-full text-white/60">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                   </button>
+                </div>
+                <ManuscriptViewer pdf={pdf} lang={lang} />
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+};
+
+export default App;
