@@ -20,17 +20,35 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
   const pdfDocRef = useRef<any>(null);
   const t = translations[lang];
 
+  // مفاتيح التخزين المحلي بناءً على اسم الملف لضمان استقلالية كل ملف
+  const storageKeyTime = `reading_time_${pdf.name}`;
+  const storageKeyPage = `current_page_${pdf.name}`;
+
+  // استعادة الوقت والصفحة عند التحميل لأول مرة
+  useEffect(() => {
+    const savedTime = localStorage.getItem(storageKeyTime);
+    const savedPage = localStorage.getItem(storageKeyPage);
+    
+    if (savedTime) setReadingTime(parseInt(savedTime));
+    if (savedPage) setCurrentPage(parseInt(savedPage));
+  }, [storageKeyTime, storageKeyPage]);
+
   // نظام تتبع وقت القراءة والنجوم
   useEffect(() => {
     const timer = setInterval(() => {
-      setReadingTime(prev => prev + 1);
+      setReadingTime(prev => {
+        const newTime = prev + 1;
+        localStorage.setItem(storageKeyTime, newTime.toString());
+        return newTime;
+      });
     }, 1000);
     return () => clearInterval(timer);
-  }, []);
+  }, [storageKeyTime]);
 
-  // تصفير العداد عند رفع ملف جديد
+  // تصفير العداد عند رفع ملف جديد (فقط إذا كان ملفاً مختلفاً تماماً، لكن هنا نعتمد على pdf.name في المفاتيح)
+  // تم تعديل هذا الجزء ليكون أكثر دقة
   useEffect(() => {
-    setReadingTime(0);
+    // إذا أردت تصفير العداد يدوياً يمكنك ذلك، لكن الطلب هو أن يكون تراكمياً لكل ملف
   }, [pdf.base64]);
 
   const getStars = (seconds: number) => {
@@ -89,6 +107,21 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         pdfDocRef.current = pdfDoc;
         setNumPages(pdfDoc.numPages);
         setLoading(false);
+
+        // التوجه للصفحة المحفوظة بعد تحميل الملف
+        const savedPage = localStorage.getItem(storageKeyPage);
+        if (savedPage) {
+          const pageNum = parseInt(savedPage);
+          setTimeout(() => {
+            if (containerRef.current) {
+              const width = containerRef.current.clientWidth;
+              containerRef.current.scrollTo({
+                left: (pageNum - 1) * width,
+                behavior: 'instant'
+              });
+            }
+          }, 100);
+        }
       } catch (err) {
         console.error("Error loading PDF:", err);
         setError(lang === 'ar' ? "فشل تحميل المحتوى البصري للمخطوط." : "Failed to load manuscript visual core.");
@@ -103,9 +136,9 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         pdfDocRef.current.destroy();
       }
     };
-  }, [pdf.base64, lang]);
+  }, [pdf.base64, lang, storageKeyPage]);
 
-  // مراقبة الصفحة الحالية عند التمرير
+  // مراقبة الصفحة الحالية عند التمرير وحفظها
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -116,12 +149,13 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
       const page = Math.round(scrollLeft / width) + 1;
       if (page !== currentPage && page > 0 && page <= numPages) {
         setCurrentPage(page);
+        localStorage.setItem(storageKeyPage, page.toString());
       }
     };
 
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
-  }, [currentPage, numPages]);
+  }, [currentPage, numPages, storageKeyPage]);
 
   const goToPage = (e: React.FormEvent) => {
     e.preventDefault();
@@ -133,6 +167,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         behavior: 'smooth'
       });
       setJumpPage('');
+      localStorage.setItem(storageKeyPage, pageNum.toString());
     }
   };
 
@@ -174,7 +209,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
         </div>
       )}
 
-      {/* شريط الأدوات العلوي - تم إعادة تصميمه لضمان ظهور العداد والنجوم في المنتصف */}
+      {/* شريط الأدوات العلوي */}
       <div className="h-14 bg-black/95 border-b border-white/10 flex flex-col z-30 shrink-0">
         <div className="flex items-center justify-between px-3 h-8 border-b border-white/5">
           <span className="text-[9px] font-medium text-white/30 truncate max-w-[150px]">
@@ -210,7 +245,7 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
           </div>
         </div>
 
-        {/* منطقة التحفيز والنجوم - تظهر في المنتصف تماماً كما في الصورة */}
+        {/* منطقة التحفيز والنجوم */}
         <div className="flex-1 flex items-center justify-center px-4 bg-gradient-to-r from-transparent via-white/5 to-transparent">
           <div className="flex items-center gap-3">
             <div className="flex gap-0.5">
@@ -267,9 +302,9 @@ export const ManuscriptViewer: React.FC<ManuscriptViewerProps> = ({ pdf, lang })
 
 const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = ({ pdfDoc, pageNum, zoom }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const renderTaskRef = useRef<any>(null);
   const [isVisible, setIsVisible] = useState(false);
   const [isRendered, setIsRendered] = useState(false);
-  const renderTaskRef = useRef<any>(null);
 
   useEffect(() => {
     const observer = new IntersectionObserver(
@@ -291,7 +326,6 @@ const PageRenderer: React.FC<{ pdfDoc: any, pageNum: number, zoom: number }> = (
 
     const renderPage = async () => {
       try {
-        // إلغاء أي عملية رندر سابقة لنفس الصفحة لتجنب التعارض عند تغيير الزوم بسرعة
         if (renderTaskRef.current) {
           renderTaskRef.current.cancel();
         }
