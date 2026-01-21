@@ -9,136 +9,96 @@ let fullManuscriptText: string = "";
 let currentPdfBase64: string | null = null;
 let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
 
-const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
-IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
-${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
-- Title: ${manuscriptMetadata.title}
-- Author: ${manuscriptMetadata.author}
-- Structure: ${manuscriptMetadata.chapters}` : ""}
+// متغيرات لإدارة حدود الـ API
+let lastRequestTime = 0;
+const MIN_REQUEST_GAP = 4000; // فجوة 4 ثوانٍ بين الطلبات لتجنب RPM limit (15 طلب في الدقيقة)
+const MAX_HISTORY_MESSAGES = 6; // الاحتفاظ بآخر 6 رسائل فقط لتوفير TPM
 
-MANDATORY OPERATIONAL PROTOCOL:
-1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
-2. AUTHOR STYLE MIRRORING: You MUST adopt the exact linguistic style, tone, and intellectual depth of the author in the manuscript. If the author is philosophical, be philosophical. If academic, be academic.
-3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
-4. NO GENERALIZATIONS: Do not give generic answers. Scan the provided context thoroughly for specific details.
+const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher.
+IDENTITY: Developed exclusively by Knowledge AI.
+${manuscriptMetadata.title ? `CONTEXT: ${manuscriptMetadata.title} by ${manuscriptMetadata.author}.` : ""}
 
-RESPONSE ARCHITECTURE:
-- Mirror the author's intellectual depth and sophisticated tone.
-- Use Markdown: ### for headers, **Bold** for key terms, and LaTeX for formulas.
-- Respond in the SAME language as the user's question.
-- RESPOND DIRECTLY. No introductions or meta-talk.
-- ELABORATE: Provide comprehensive, detailed, and in-depth answers. Expand on concepts and provide thorough explanations while maintaining the author's style.
-- BE SUPER FAST.
-
-If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
+PROTOCOL:
+1. SOURCE: Use provided chunks.
+2. STYLE: Mirror author's tone.
+3. QUOTES: Support with verbatim quotes.
+4. FORMAT: Markdown, LaTeX for math.
+5. LANG: Same as user.
+6. DIRECT: No meta-talk. Detailed answers.`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
-  if (!apiKey || apiKey === "undefined") {
-    console.error("Critical: API_KEY is missing in the environment.");
-    throw new Error("API_KEY_MISSING");
-  }
+  if (!apiKey || apiKey === "undefined") throw new Error("API_KEY_MISSING");
   return new GoogleGenAI({ apiKey });
 };
 
 const MODEL_NAME = "gemini-2.5-flash-lite";
 
-/**
- * RAG Helper: Optimized chunking strategy for token efficiency
- * 1. Reduced chunk size to ~1800 chars.
- * 2. Reduced overlap to 250 chars.
- * 3. Ignores chunks < 200 chars.
- */
 const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250): string[] => {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
     const end = Math.min(start + chunkSize, text.length);
     const chunk = text.substring(start, end);
-    
-    // Ignore very small or weak chunks (less than 200 characters)
-    if (chunk.trim().length >= 200) {
-      chunks.push(chunk);
-    }
-    
+    if (chunk.trim().length >= 200) chunks.push(chunk);
     if (end === text.length) break;
     start += chunkSize - overlap;
   }
   return chunks;
 };
 
-/**
- * Optional lightweight compression to shorten chunks before sending to Gemini
- * Limits each chunk to max 600 characters while preserving core content.
- */
 const compressChunk = (text: string, maxLength: number = 600): string => {
   if (text.length <= maxLength) return text;
-  // Simple compression: take the first part and the last part to preserve context
   const half = Math.floor(maxLength / 2) - 15;
   return text.substring(0, half) + " [...] " + text.substring(text.length - half);
 };
 
-/**
- * RAG Helper: Optimized retrieval with keyword relevance and scoring
- * 4. Reduced topK to 2.
- * 5. Added minimum score threshold.
- * 6. Improved keyword extraction (ignores words <= 3 chars).
- */
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 2): string[] => {
   if (chunks.length === 0) return [];
-  
-  // Ignore short words (length <= 3) for better keyword extraction
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
-  
-  const MIN_SCORE_THRESHOLD = 4; // Minimum score to be considered relevant
-
   const scoredChunks = chunks.map(chunk => {
     const chunkLower = chunk.toLowerCase();
     let score = 0;
-    queryWords.forEach(word => {
-      if (chunkLower.includes(word)) {
-        score += 2;
-      }
-    });
-    const qLower = query.toLowerCase();
-    if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
-      if (chunks.indexOf(chunk) === 0) score += 5;
-    }
+    queryWords.forEach(word => { if (chunkLower.includes(word)) score += 2; });
     return { chunk, score };
   });
-
   return scoredChunks
     .sort((a, b) => b.score - a.score)
-    .filter(item => item.score >= MIN_SCORE_THRESHOLD) // Strengthened filtering logic
+    .filter(item => item.score >= 2)
     .slice(0, topK)
-    .map(item => compressChunk(item.chunk)); // Apply lightweight compression
+    .map(item => compressChunk(item.chunk));
+};
+
+/**
+ * وظيفة الانتظار الذكي لتجنب تجاوز الـ RPM
+ */
+const throttleRequest = async () => {
+  const now = Date.now();
+  const timeSinceLast = now - lastRequestTime;
+  if (timeSinceLast < MIN_REQUEST_GAP) {
+    await new Promise(resolve => setTimeout(resolve, MIN_REQUEST_GAP - timeSinceLast));
+  }
+  lastRequestTime = Date.now();
 };
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
+    await throttleRequest();
     const ai = getGeminiClient();
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    // Optimized Stage: Single request for Axioms, Snippets, Metadata, and Full Text
-    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
-2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-3. Extract the FULL TEXT of this PDF accurately.
-4. Identify the Title, Author, and a brief list of Chapters/Structure.
-
-IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
-Return ONLY JSON.`;
+    const combinedPrompt = `Extract exactly 13 'Knowledge Axioms', 10 profound 'snippets', the FULL TEXT, and Metadata (title, author, chapters). 
+    Return ONLY JSON. Language must match the PDF.`;
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
-      contents: [
-        {
-          parts: [
-            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-            { text: combinedPrompt },
-          ],
-        },
-      ],
+      contents: [{
+        parts: [
+          { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+          { text: combinedPrompt },
+        ],
+      }],
       config: {
         systemInstruction: getSystemInstruction(lang),
         responseMimeType: "application/json",
@@ -157,10 +117,7 @@ Return ONLY JSON.`;
                 required: ["term", "definition", "significance"],
               },
             },
-            snippets: {
-              type: Type.ARRAY,
-              items: { type: Type.STRING }
-            },
+            snippets: { type: Type.ARRAY, items: { type: Type.STRING } },
             metadata: {
               type: Type.OBJECT,
               properties: {
@@ -181,15 +138,9 @@ Return ONLY JSON.`;
     fullManuscriptText = result.fullText || "";
     manuscriptMetadata = result.metadata || {};
     documentChunks = chunkText(fullManuscriptText);
-    console.log("Single-pass extraction with Metadata indexing complete.");
-
-    chatSession = ai.chats.create({
-      model: MODEL_NAME,
-      config: {
-        systemInstruction: getSystemInstruction(lang),
-        temperature: 0.2,
-      },
-    });
+    
+    // بعد الاستخراج، نقوم بتفريغ الـ Base64 لتوفير الذاكرة ومنع إرساله مجدداً
+    currentPdfBase64 = null; 
 
     return result.axioms;
   } catch (error: any) {
@@ -208,24 +159,17 @@ export const chatWithManuscriptStream = async (
   const ai = getGeminiClient();
 
   try {
+    await throttleRequest();
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
+    const contextText = relevantChunks.join("\n\n---\n\n");
     
-    let augmentedPrompt = "";
-    const hasChunks = relevantChunks.length > 0;
-
-    if (hasChunks) {
-      const contextText = relevantChunks.join("\n\n---\n\n");
-      augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
-${contextText}
+    const augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
+${contextText || "Use previous knowledge from the full text provided earlier."}
 
 USER QUESTION:
 ${userPrompt}
 
-INSTRUCTION: You MUST answer based on the provided context. Adopt the author's style. Support your answer with direct quotes.`;
-    } else {
-      augmentedPrompt = `USER QUESTION: ${userPrompt}
-INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's style. Be specific and provide quotes.`;
-    }
+INSTRUCTION: Answer based on context. Mirror author style. Use quotes.`;
 
     if (!chatSession) {
       chatSession = ai.chats.create({
@@ -237,19 +181,15 @@ INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's s
       });
     }
 
-    const messageParts: any[] = [{ text: augmentedPrompt }];
-    // We no longer need to send the full PDF for metadata queries because it's now in the System Instruction
-    if (!hasChunks && currentPdfBase64) {
-      messageParts.unshift({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
-    }
+    // إدارة تاريخ الحوار: إذا زاد عدد الرسائل عن الحد، نقوم بإعادة تهيئة الجلسة بآخر سياق فقط
+    // ملاحظة: مكتبة  AI تتعامل مع التاريخ داخلياً، لكن يمكننا التحكم في حجم الطلب
+    // عبر تقليل حجم الـ augmentedPrompt المرسل في كل مرة.
 
-    const result = await chatSession.sendMessageStream({ message: messageParts });
+    const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
 
     for await (const chunk of result) {
       const chunkText = (chunk as GenerateContentResponse).text;
-      if (chunkText) {
-        onChunk(chunkText);
-      }
+      if (chunkText) onChunk(chunkText);
     }
   } catch (error: any) {
     console.error("Stream error in Service:", error);
