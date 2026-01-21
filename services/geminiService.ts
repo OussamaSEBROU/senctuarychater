@@ -47,7 +47,7 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash-lite";
 
-const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250): string[] => {
+const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 400): string[] => {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
