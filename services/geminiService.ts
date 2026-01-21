@@ -192,6 +192,7 @@ INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's s
         config: {
           systemInstruction: getSystemInstruction(lang),
           temperature: 0.2,
+          maxOutputTokens: 1800,
         },
       });
     }
