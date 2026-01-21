@@ -23,6 +23,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const scrollRef = useRef<HTMLDivElement>(null);
   const t = translations[lang];
 
+  // متغير التحكم في سرعة ظهور المقولات (بالثواني)
+  const quoteSpeed = 5; 
+
   useEffect(() => {
     let interval: NodeJS.Timeout;
     if (isLoading) {
@@ -36,12 +39,12 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
           setUsedSnippets(prev => new Set(prev).add(random));
         }
       };
-      
+
       updateSnippet();
-      interval = setInterval(updateSnippet, 6000);
+      interval = setInterval(updateSnippet, quoteSpeed * 1000);
     }
     return () => clearInterval(interval);
-  }, [isLoading, usedSnippets]);
+  }, [isLoading, usedSnippets, quoteSpeed]);
 
   const handleAutoScroll = () => {
     if (scrollRef.current) {
@@ -72,7 +75,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
     const userText = input;
     const userMessage: Message = { role: 'user', content: userText };
-    
+
     setMessages(prev => [...prev, userMessage, { role: 'model', content: '' }]);
     setInput('');
     setIsLoading(true);
@@ -115,6 +118,10 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
           85% { opacity: 1; filter: blur(0); transform: translateY(0) scale(1); }
           100% { opacity: 0; filter: blur(12px); transform: translateY(-20px) scale(1.05); }
         }
+        @keyframes shiningEffect {
+          0% { background-position: -200% center; }
+          100% { background-position: 200% center; }
+        }
         .cinematic-quote-container {
           perspective: 1200px;
           width: 100%;
@@ -125,18 +132,25 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
           padding: 0 20px;
         }
         .cinematic-quote {
-          animation: cinematicFade 6s ease-in-out infinite;
-          background: linear-gradient(to right, #fff, #a34a28, #fff);
+          animation: cinematicFade ${quoteSpeed}s ease-in-out infinite, shiningEffect 3s linear infinite;
+          background: linear-gradient(90deg, 
+            rgba(255,255,255,0.6) 0%, 
+            rgba(255,255,255,1) 25%, 
+            #a34a28 50%, 
+            rgba(255,255,255,1) 75%, 
+            rgba(255,255,255,0.6) 100%
+          );
           background-size: 200% auto;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
-          text-shadow: 0 0 40px rgba(163,74,40,0.4);
+          text-shadow: 0 0 30px rgba(163,74,40,0.2);
           letter-spacing: 0.03em;
           text-align: center;
           font-style: italic;
           font-weight: 600;
           line-height: 1.8;
           max-width: 800px;
+          transition: opacity 0.5s ease-in-out;
         }
       `}</style>
 
@@ -167,7 +181,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                   <div className={`w-6 h-6 md:w-8 md:h-8 rounded-full shrink-0 flex items-center justify-center text-[8px] font-black border mt-1 ${isUser ? 'bg-indigo-600 border-indigo-500' : 'bg-[#a34a28] border-orange-900 shadow-[0_0_10px_rgba(163,74,40,0.3)]'}`}>
                     {isUser ? 'U' : 'AI'}
                   </div>
-                  
+
                   <div className={`flex-1 min-w-0 relative ${isUser ? 'bg-[#1a1a1a] rounded-2xl px-4 py-3 border border-white/5' : ''}`}>
                     {!isUser && msg.content && (
                       <button 
