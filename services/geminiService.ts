@@ -11,9 +11,11 @@ let manuscriptMetadata: { title?: string; author?: string; chapters?: string; su
 
 // متغيرات لإدارة حدود الـ API
 let lastRequestTime = 0;
-const MIN_REQUEST_GAP = 4000; // فجوة 4 ثوانٍ بين الطلبات لتجنب RPM limit (15 طلب في الدقيقة)
-const MAX_HISTORY_MESSAGES = 6; // الاحتفاظ بآخر 6 رسائل فقط لتوفير TPM
+const MIN_REQUEST_GAP = 4000; // فجوة 4 ثوانٍ لتجنب RPM limit
 
+/**
+ * استعادة برومبت النظام الأصلي تماماً كما كان في الملف الأول
+ */
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
 ${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
@@ -35,7 +37,7 @@ RESPONSE ARCHITECTURE:
 - ELABORATE: Provide comprehensive, detailed, and in-depth answers. Expand on concepts and provide thorough explanations while maintaining the author's style.
 - BE SUPER FAST.
 
-If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "you should ask just about the file content".`;
+If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
 
 export const getGeminiClient = () => {
   const apiKey = process.env.API_KEY;
@@ -58,12 +60,6 @@ const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250
   return chunks;
 };
 
-const compressChunk = (text: string, maxLength: number = 600): string => {
-  if (text.length <= maxLength) return text;
-  const half = Math.floor(maxLength / 2) - 15;
-  return text.substring(0, half) + " [...] " + text.substring(text.length - half);
-};
-
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 2): string[] => {
   if (chunks.length === 0) return [];
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
@@ -75,14 +71,11 @@ const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 
   });
   return scoredChunks
     .sort((a, b) => b.score - a.score)
-    .filter(item => item.score >= 2)
+    .filter(item => item.score >= 4)
     .slice(0, topK)
-    .map(item => compressChunk(item.chunk));
+    .map(item => item.chunk);
 };
 
-/**
- * وظيفة الانتظار الذكي لتجنب تجاوز الـ RPM
- */
 const throttleRequest = async () => {
   const now = Date.now();
   const timeSinceLast = now - lastRequestTime;
@@ -99,8 +92,13 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
-    const combinedPrompt = `Extract exactly 13 'Knowledge Axioms', 10 profound 'snippets', the FULL TEXT, and Metadata (title, author, chapters). 
-    Return ONLY JSON. Language must match the PDF.`;
+    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
+2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
+3. Extract the FULL TEXT of this PDF accurately.
+4. Identify the Title, Author, and a brief list of Chapters/Structure.
+
+IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
+Return ONLY JSON.`;
 
     const response = await ai.models.generateContent({
       model: MODEL_NAME,
@@ -150,7 +148,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     manuscriptMetadata = result.metadata || {};
     documentChunks = chunkText(fullManuscriptText);
     
-    // بعد الاستخراج، نقوم بتفريغ الـ Base64 لتوفير الذاكرة ومنع إرساله مجدداً
+    // منع إرسال الـ PDF مجدداً لتوفير التوكنز
     currentPdfBase64 = null; 
 
     return result.axioms;
@@ -172,15 +170,21 @@ export const chatWithManuscriptStream = async (
   try {
     await throttleRequest();
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
-    const contextText = relevantChunks.join("\n\n---\n\n");
     
-    const augmentedPrompt = `CONTEXT FROM MANUSCRIPT:
-${contextText || "Use previous knowledge from the full text provided earlier."}
+    let augmentedPrompt = "";
+    if (relevantChunks.length > 0) {
+      const contextText = relevantChunks.join("\n\n---\n\n");
+      augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
+${contextText}
 
 USER QUESTION:
 ${userPrompt}
 
-INSTRUCTION: Answer based on context. Mirror author style. Use quotes.`;
+INSTRUCTION: You MUST answer based on the provided context. Adopt the author's style. Support your answer with direct quotes.`;
+    } else {
+      augmentedPrompt = `USER QUESTION: ${userPrompt}
+INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's style. Be specific and provide quotes.`;
+    }
 
     if (!chatSession) {
       chatSession = ai.chats.create({
@@ -191,10 +195,6 @@ INSTRUCTION: Answer based on context. Mirror author style. Use quotes.`;
         },
       });
     }
-
-    // إدارة تاريخ الحوار: إذا زاد عدد الرسائل عن الحد، نقوم بإعادة تهيئة الجلسة بآخر سياق فقط
-    // ملاحظة: مكتبة  AI تتعامل مع التاريخ داخلياً، لكن يمكننا التحكم في حجم الطلب
-    // عبر تقليل حجم الـ augmentedPrompt المرسل في كل مرة.
 
     const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
 
