@@ -9,13 +9,10 @@ let fullManuscriptText: string = "";
 let currentPdfBase64: string | null = null;
 let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
 
-// متغيرات لإدارة حدود الـ API
+// إدارة حدود الـ API (خلف الكواليس)
 let lastRequestTime = 0;
-const MIN_REQUEST_GAP = 4000; // فجوة 4 ثوانٍ لتجنب RPM limit
+const MIN_REQUEST_GAP = 3500; // فجوة زمنية ذكية لتجنب RPM limit
 
-/**
- * استعادة برومبت النظام الأصلي تماماً كما كان في الملف الأول
- */
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
 ${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
@@ -47,7 +44,10 @@ export const getGeminiClient = () => {
 
 const MODEL_NAME = "gemini-2.5-flash-lite";
 
-const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 400): string[] => {
+/**
+ * استعادة استراتيجية التقطيع الأصلية لضمان جودة السياق
+ */
+const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250): string[] => {
   const chunks: string[] = [];
   let start = 0;
   while (start < text.length) {
@@ -60,20 +60,30 @@ const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 400
   return chunks;
 };
 
+/**
+ * استعادة منطق الاسترجاع الأصلي مع تحسين بسيط في النقاط لضمان الجودة
+ */
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 2): string[] => {
   if (chunks.length === 0) return [];
   const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const MIN_SCORE_THRESHOLD = 4; 
+
   const scoredChunks = chunks.map(chunk => {
     const chunkLower = chunk.toLowerCase();
     let score = 0;
     queryWords.forEach(word => { if (chunkLower.includes(word)) score += 2; });
+    const qLower = query.toLowerCase();
+    if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
+      if (chunks.indexOf(chunk) === 0) score += 5;
+    }
     return { chunk, score };
   });
+
   return scoredChunks
     .sort((a, b) => b.score - a.score)
-    .filter(item => item.score >= 4)
+    .filter(item => item.score >= MIN_SCORE_THRESHOLD)
     .slice(0, topK)
-    .map(item => item.chunk);
+    .map(item => item.chunk); // إرسال القطعة كاملة دون ضغط لضمان الجودة الأصلية
 };
 
 const throttleRequest = async () => {
@@ -148,7 +158,7 @@ Return ONLY JSON.`;
     manuscriptMetadata = result.metadata || {};
     documentChunks = chunkText(fullManuscriptText);
     
-    // منع إرسال الـ PDF مجدداً لتوفير التوكنز
+    // توفير التوكنز: مسح الـ PDF بعد الاستخراج الأول
     currentPdfBase64 = null; 
 
     return result.axioms;
@@ -172,7 +182,9 @@ export const chatWithManuscriptStream = async (
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
     
     let augmentedPrompt = "";
-    if (relevantChunks.length > 0) {
+    const hasChunks = relevantChunks.length > 0;
+
+    if (hasChunks) {
       const contextText = relevantChunks.join("\n\n---\n\n");
       augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
 ${contextText}
@@ -192,11 +204,11 @@ INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's s
         config: {
           systemInstruction: getSystemInstruction(lang),
           temperature: 0.2,
-          maxOutputTokens: 1800,
         },
       });
     }
 
+    // إرسال الطلب مع الحفاظ على جودة الإجابة الأصلية
     const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
 
     for await (const chunk of result) {
