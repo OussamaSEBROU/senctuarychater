@@ -102,9 +102,11 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     chatSession = null;
     currentPdfBase64 = pdfBase64;
 
+    // طلب البديهيات والبيانات الوصفية والنص الكامل بدقة عالية
+    // بفضل الـ Output Limit الجديد (65k)، يمكننا استخراج النص الكامل بأمان
     const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
 2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-3. Extract the QUOTES from this PDF accurately.
+3. Extract the FULL TEXT of this PDF accurately and comprehensively.
 4. Identify the Title, Author, and a brief list of Chapters/Structure.
 
 IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
@@ -156,6 +158,8 @@ Return ONLY JSON.`;
     manuscriptSnippets = result.snippets || [];
     fullManuscriptText = result.fullText || "";
     manuscriptMetadata = result.metadata || {};
+    
+    // تقطيع النص وتجهيزه للـ RAG في الخلفية
     documentChunks = chunkText(fullManuscriptText);
     
     // توفير التوكنز: مسح الـ PDF بعد الاستخراج الأول
@@ -179,6 +183,8 @@ export const chatWithManuscriptStream = async (
 
   try {
     await throttleRequest();
+    
+    // استخدام نظام الـ RAG الموجود بدقة عالية بناءً على النص المستخرج مسبقاً
     const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
     
     let augmentedPrompt = "";
