@@ -162,16 +162,30 @@ const App: React.FC = () => {
       return;
     }
     
+    // Senior Fix: Use ArrayBuffer for more efficient reading of large files
     const reader = new FileReader();
     reader.onload = async () => {
-      const result = reader.result as string;
-      const base64 = result.substring(result.indexOf(',') + 1);
-      
-      // تحسين الذاكرة: تعيين الـ PDF أولاً ثم البدء في التحليل مباشرة
-      setPdf({ base64, name: file.name });
-      handleSynthesis(base64, lang);
+      try {
+        const arrayBuffer = reader.result as ArrayBuffer;
+        const bytes = new Uint8Array(arrayBuffer);
+        
+        // Convert to base64 in chunks to avoid call stack size exceeded for very large files
+        let binary = '';
+        const len = bytes.byteLength;
+        for (let i = 0; i < len; i += 8192) {
+          binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, Math.min(i + 8192, len))));
+        }
+        const base64 = btoa(binary);
+        
+        // Store in state and trigger synthesis
+        setPdf({ base64, name: file.name });
+        handleSynthesis(base64, lang);
+      } catch (err) {
+        console.error("File processing error:", err);
+        setError(lang === 'ar' ? "حدث خطأ أثناء معالجة الملف الكبير." : "Error processing large file.");
+      }
     };
-    reader.readAsDataURL(file);
+    reader.readAsArrayBuffer(file);
   };
 
   const handleNewChat = () => {
@@ -246,105 +260,85 @@ const App: React.FC = () => {
             onClick={() => setShowViewer(!showViewer)}
             className={`flex items-center gap-2 px-4 py-2 rounded-xl transition-all border text-[10px] font-black tracking-widest uppercase ${showViewer ? 'bg-white border-white text-black' : 'bg-white/5 border-white/5 text-white/40 hover:text-white'}`}
           >
-            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
-            {t.viewer}
+            <span className="hidden md:inline">{showViewer ? (lang === 'ar' ? 'إغلاق العارض' : 'Close Viewer') : (lang === 'ar' ? 'فتح المخطوط' : 'Open Manuscript')}</span>
           </button>
         )}
       </header>
 
-      <main className="flex-1 relative flex flex-col min-h-0">
+      <main className="flex-1 overflow-hidden relative z-10 flex flex-col">
         {!pdf ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-            <div className="mb-12 animate-in zoom-in duration-1000">
-              <h2 className="text-4xl md:text-7xl font-black tracking-[0.2em] mb-6 uppercase text-white">{translations.en.sanctuary}</h2>
-              <p className="text-[10px] md:text-xs font-black tracking-[0.4em] text-orange-500/60 uppercase max-w-md mx-auto leading-loose">{t.introText}</p>
-            </div>
-
-            <label className="group relative cursor-pointer">
-              <input type="file" accept=".pdf" onChange={handleFileUpload} className="hidden" />
-              <div className="w-64 h-64 md:w-80 md:h-80 rounded-3xl border border-white/5 bg-white/[0.02] flex flex-col items-center justify-center gap-6 transition-all group-hover:bg-white/[0.05] group-hover:border-white/10 group-active:scale-95">
-                <div className="w-16 h-16 rounded-full bg-white/5 flex items-center justify-center group-hover:bg-orange-500/10 transition-colors">
-                  <svg className="w-6 h-6 text-white/20 group-hover:text-orange-500 transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                </div>
-                <div className="text-center">
-                  <p className="text-[10px] font-black tracking-[0.3em] uppercase text-white/40 mb-2">{t.upload}</p>
-                  <p className="text-[8px] font-black tracking-[0.2em] uppercase text-white/10">{t.uploadDesc}</p>
-                </div>
+          <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 text-center touch-auto" dir="ltr">
+            <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
+              {translations.en.sanctuary}
+            </h2>
+            <p className="mb-12 text-sm md:text-2xl font-black tracking-tight text-glow-orange max-w-2xl leading-tight font-sans">
+              {lang === 'ar' ? translations.ar.introText : translations.en.introText}
+            </p>
+            <label className="w-full max-w-sm group relative block aspect-[1.3/1] border border-dashed border-white/10 rounded-[3rem] hover:border-[#a34a28]/40 transition-all cursor-pointer bg-white/[0.01]">
+              <input type="file" className="hidden" accept="application/pdf" onChange={handleFileUpload} />
+              <div className="absolute inset-0 flex flex-col items-center justify-center space-y-6">
+                 <div className="w-16 h-16 rounded-[2rem] bg-white/5 border border-white/10 flex items-center justify-center group-hover:bg-[#a34a28]/10 transition-all duration-500 shadow-[0_0_20px_rgba(163,74,40,0)] group-hover:shadow-[0_0_20px_rgba(163,74,40,0.2)]">
+                    <svg className="w-8 h-8 text-white/10 group-hover:text-[#a34a28] transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
+                 </div>
+                 <span className="text-[10px] md:text-xs font-black tracking-[0.4em] text-white/20 uppercase group-hover:text-white/60">
+                   {translations.en.upload}
+                 </span>
               </div>
             </label>
-
             {error && (
-              <div className="mt-12 animate-in slide-in-from-bottom duration-500">
-                <div className="px-6 py-3 rounded-full bg-red-500/10 border border-red-500/20 text-red-500 text-[10px] font-black tracking-widest uppercase">
+              <div className="mt-8 max-w-md mx-auto">
+                <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] bg-red-500/10 px-6 py-2 rounded-full border border-red-500/20 shadow-lg">
                   {error}
-                </div>
+                </p>
               </div>
             )}
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-h-0 relative">
+          <div className="flex-1 flex flex-col lg:flex-row relative overflow-hidden">
+            <div className={`flex-1 flex flex-col transition-all duration-700 ease-in-out overflow-hidden ${showViewer ? 'lg:w-1/2 opacity-100' : 'lg:w-full'}`}>
+              {flowStep === 'axioms' && (
+                <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-4 touch-auto">
+                   <h3 className="text-2xl md:text-5xl font-black mb-8 uppercase text-center text-white/90 tracking-widest">{t.axiomsTitle}</h3>
+                   <div ref={carouselRef} className="w-full flex gap-6 px-4 md:px-[5%] overflow-x-auto snap-x scrollbar-none pb-10 touch-pan-x">
+                      {axioms.length > 0 ? axioms.map((ax, i) => (
+                        <div key={i} className="min-w-[280px] md:min-w-[400px] snap-center">
+                          <AxiomCard axiom={ax} index={i} />
+                        </div>
+                      )) : (
+                        <div className="w-full flex justify-center py-20 opacity-20">
+                           <div className="w-10 h-10 border-2 border-white/10 border-t-white/40 rounded-full animate-spin"></div>
+                        </div>
+                      )}
+                   </div>
+                   <button 
+                    onClick={() => { setFlowStep('chat'); if(window.innerWidth > 1024) setShowViewer(true); }} 
+                    className="px-12 py-5 bg-[#a34a28] rounded-full font-black text-xs tracking-[0.4em] uppercase hover:bg-orange-800 transition-all shadow-[0_0_30px_rgba(163,74,40,0.3)] mt-4 active:scale-95"
+                   >
+                     {t.deepChatBtn}
+                   </button>
+                </div>
+              )}
+              {flowStep === 'chat' && (
+                <div className="flex-1 bg-[#080808] overflow-hidden">
+                  <ChatInterface pdf={pdf} lang={lang} />
+                </div>
+              )}
+            </div>
+
             {showViewer && (
-              <div className="absolute inset-0 z-50 bg-black animate-in fade-in duration-500">
+              <div className={`fixed inset-0 lg:relative lg:inset-auto lg:w-1/2 bg-black z-[70] lg:z-10 animate-in slide-in-from-right duration-500 border-l border-white/10 flex flex-col shadow-[-20px_0_50px_rgba(0,0,0,0.8)] overflow-hidden`}>
+                <div className="flex lg:hidden items-center justify-between p-4 bg-[#1a1a1a] border-b border-white/10">
+                   <h4 className="text-[10px] font-black tracking-widest uppercase text-white/40">{t.viewer}</h4>
+                   <button onClick={() => setShowViewer(false)} className="p-2 bg-white/5 rounded-full text-white/60">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M6 18L18 6M6 6l12 12" strokeWidth="2.5" strokeLinecap="round"/></svg>
+                   </button>
+                </div>
                 <ManuscriptViewer pdf={pdf} lang={lang} />
               </div>
             )}
-
-            <div className="flex-1 flex flex-col min-h-0">
-              <div className="h-14 md:h-16 px-4 md:px-8 flex items-center justify-between border-b border-white/5 shrink-0">
-                <div className="flex gap-4 md:gap-8">
-                  <button 
-                    onClick={() => setFlowStep('axioms')}
-                    className={`text-[10px] font-black tracking-[0.3em] uppercase transition-all ${flowStep === 'axioms' ? 'text-orange-500' : 'text-white/20 hover:text-white'}`}
-                  >
-                    {t.axiomsTitle}
-                  </button>
-                  <button 
-                    onClick={() => setFlowStep('chat')}
-                    className={`text-[10px] font-black tracking-[0.3em] uppercase transition-all ${flowStep === 'chat' ? 'text-orange-500' : 'text-white/20 hover:text-white'}`}
-                  >
-                    {t.dialogue}
-                  </button>
-                </div>
-                <div className="hidden sm:flex items-center gap-3">
-                  <div className="w-2 h-2 rounded-full bg-orange-500 animate-pulse"></div>
-                  <span className="text-[8px] font-black tracking-widest text-white/20 uppercase">{pdf.name}</span>
-                </div>
-              </div>
-
-              <div className="flex-1 overflow-hidden relative">
-                {flowStep === 'axioms' ? (
-                  <div ref={carouselRef} className="h-full overflow-x-auto overflow-y-hidden flex items-center px-4 md:px-12 gap-4 md:gap-8 snap-x snap-mandatory no-scrollbar">
-                    {axioms.map((axiom, i) => (
-                      <div key={i} className="snap-center shrink-0 w-[85vw] md:w-[400px]">
-                        <AxiomCard axiom={axiom} index={i} lang={lang} />
-                      </div>
-                    ))}
-                    <div className="snap-center shrink-0 w-[85vw] md:w-[400px] h-[450px] md:h-[550px] flex flex-col items-center justify-center p-8 md:p-12 rounded-[2.5rem] border border-white/5 bg-white/[0.02] text-center">
-                      <div className="w-16 h-16 rounded-full bg-orange-500/10 flex items-center justify-center mb-8">
-                        <svg className="w-6 h-6 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" /></svg>
-                      </div>
-                      <h3 className="text-xl font-black text-white mb-4 uppercase tracking-widest">{t.dialogue}</h3>
-                      <p className="text-[10px] text-white/40 leading-relaxed mb-10 uppercase tracking-widest">{t.dialogueDesc}</p>
-                      <button 
-                        onClick={() => setFlowStep('chat')}
-                        className="w-full py-4 rounded-2xl bg-white text-black text-[10px] font-black tracking-[0.3em] uppercase hover:bg-orange-500 hover:text-white transition-all"
-                      >
-                        {t.deepChatBtn}
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <ChatInterface pdf={pdf} lang={lang} />
-                )}
-              </div>
-            </div>
           </div>
         )}
       </main>
-
-      <footer className="h-10 md:h-12 px-4 md:px-8 flex items-center justify-center border-t border-white/5 bg-black/40 backdrop-blur-3xl shrink-0">
-        <p className="text-[8px] font-black tracking-[0.3em] text-white/10 uppercase text-center">{t.covenant}</p>
-      </footer>
     </div>
   );
 };
