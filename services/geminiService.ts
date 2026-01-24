@@ -100,12 +100,12 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     await throttleRequest();
     const ai = getGeminiClient();
     chatSession = null;
-    currentPdfBase64 = pdfBase64;
+    currentPdfBase64 = pdfBase64; // حفظ الـ PDF لاستخدامه كمرجع حي في الشات
 
+    // استخراج البديهيات والبيانات الوصفية فقط لضمان استقرار العملية للملفات الكبيرة
     const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
 2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-3. Extract the FULL TEXT of this PDF accurately.
-4. Identify the Title, Author, and a brief list of Chapters/Structure.
+3. Identify the Title, Author, and a brief list of Chapters/Structure.
 
 IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
 Return ONLY JSON.`;
@@ -144,22 +144,19 @@ Return ONLY JSON.`;
                 author: { type: Type.STRING },
                 chapters: { type: Type.STRING }
               }
-            },
-            fullText: { type: Type.STRING }
+            }
           },
-          required: ["axioms", "snippets", "metadata", "fullText"],
+          required: ["axioms", "snippets", "metadata"],
         },
       },
     });
 
     const result = JSON.parse(response.text || "{}");
     manuscriptSnippets = result.snippets || [];
-    fullManuscriptText = result.fullText || "";
     manuscriptMetadata = result.metadata || {};
-    documentChunks = chunkText(fullManuscriptText);
-    
-    // توفير التوكنز: مسح الـ PDF بعد الاستخراج الأول
-    currentPdfBase64 = null; 
+
+    // ملاحظة: لم نعد نستخرج النص الكامل هنا لتجنب الـ Output Limit
+    // سيتم الاعتماد على الـ PDF مباشرة في الحوار كـ Live RAG لضمان أعلى دقة وشمولية
 
     return result.axioms;
   } catch (error: any) {
@@ -179,24 +176,18 @@ export const chatWithManuscriptStream = async (
 
   try {
     await throttleRequest();
-    const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
-    
-    let augmentedPrompt = "";
-    const hasChunks = relevantChunks.length > 0;
 
-    if (hasChunks) {
-      const contextText = relevantChunks.join("\n\n---\n\n");
-      augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
-${contextText}
+    // تطبيق تقنية Live RAG: إرسال الـ PDF الأصلي مع كل سؤال
+    // هذا يضمن أن النموذج يرى النص الكامل بدقة 100% دون الحاجة لاستخراجه مسبقاً
+    const messageParts: any[] = [];
 
-USER QUESTION:
-${userPrompt}
-
-INSTRUCTION: You MUST answer based on the provided context. Adopt the author's style. Support your answer with direct quotes.`;
-    } else {
-      augmentedPrompt = `USER QUESTION: ${userPrompt}
-INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's style. Be specific and provide quotes.`;
+    if (currentPdfBase64) {
+      messageParts.push({ inlineData: { data: currentPdfBase64, mimeType: "application/pdf" } });
     }
+
+    messageParts.push({ 
+      text: `USER QUESTION: ${userPrompt}\n\nINSTRUCTION: Scan the provided manuscript thoroughly to find the answer. Adopt the author's style. Support your answer with direct, verbatim quotes from the text.` 
+    });
 
     if (!chatSession) {
       chatSession = ai.chats.create({
@@ -208,8 +199,7 @@ INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's s
       });
     }
 
-    // إرسال الطلب مع الحفاظ على جودة الإجابة الأصلية
-    const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
+    const result = await chatSession.sendMessageStream({ message: messageParts });
 
     for await (const chunk of result) {
       const chunkText = (chunk as GenerateContentResponse).text;
