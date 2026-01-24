@@ -17,6 +17,8 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isCooldown, setIsCooldown] = useState(false);
+  const [cooldownTimer, setCooldownTimer] = useState(0);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [currentSnippet, setCurrentSnippet] = useState("");
   const [usedSnippets, setUsedSnippets] = useState<Set<string>>(new Set());
@@ -25,6 +27,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   // متغير التحكم في سرعة ظهور المقولات (بالثواني)
   const quoteSpeed = 5; 
+  
+  // مدة التهدئة بين الأسئلة (بالثواني) لضمان عدم تجاوز 15 RPM
+  const COOLDOWN_DURATION = 4;
 
   useEffect(() => {
     let interval: NodeJS.Timeout;
@@ -46,6 +51,19 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
     return () => clearInterval(interval);
   }, [isLoading, usedSnippets, quoteSpeed]);
 
+  // إدارة عداد التهدئة
+  useEffect(() => {
+    let timer: NodeJS.Timeout;
+    if (isCooldown && cooldownTimer > 0) {
+      timer = setInterval(() => {
+        setCooldownTimer(prev => prev - 1);
+      }, 1000);
+    } else if (cooldownTimer === 0) {
+      setIsCooldown(false);
+    }
+    return () => clearInterval(timer);
+  }, [isCooldown, cooldownTimer]);
+
   const handleAutoScroll = () => {
     if (scrollRef.current) {
       const { scrollHeight, clientHeight } = scrollRef.current;
@@ -55,11 +73,6 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       });
     }
   };
-
-  // تم إيقاف التمرير التلقائي للسماح للمستخدم بالتحكم اليدوي الكامل أثناء توليد النص
-  // useEffect(() => {
-  //   handleAutoScroll();
-  // }, [messages, isLoading]);
 
   const isArabic = (text: string) => /[\u0600-\u06FF]/.test(text);
 
@@ -71,7 +84,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!input.trim() || isLoading) return;
+    if (!input.trim() || isLoading || isCooldown) return;
 
     const userText = input;
     const userMessage: Message = { role: 'user', content: userText };
@@ -106,6 +119,9 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
       });
     } finally {
       setIsLoading(false);
+      // تفعيل وضع التهدئة بعد انتهاء الإجابة
+      setIsCooldown(true);
+      setCooldownTimer(COOLDOWN_DURATION);
     }
   };
 
@@ -262,29 +278,34 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
         <div className="max-w-5xl mx-auto">
           <form 
             onSubmit={handleSubmit} 
-            className="group relative flex items-end bg-[#1a1a1a]/80 backdrop-blur-2xl border border-white/10 rounded-[1.5rem] md:rounded-[2rem] overflow-hidden focus-within:border-white/20 transition-all duration-300 shadow-2xl"
+            className={`group relative flex items-end bg-[#1a1a1a]/80 backdrop-blur-2xl border rounded-[1.5rem] md:rounded-[2rem] overflow-hidden transition-all duration-300 shadow-2xl ${isCooldown ? 'border-orange-500/20 opacity-80' : 'border-white/10 focus-within:border-white/20'}`}
           >
             <textarea
               rows={1}
               value={input}
+              disabled={isCooldown}
               onChange={(e) => {
                 setInput(e.target.value);
                 e.target.style.height = 'auto';
                 e.target.style.height = e.target.scrollHeight + 'px';
               }}
               onKeyDown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSubmit(e); } }}
-              placeholder={t.placeholder}
-              className={`w-full bg-transparent px-5 py-4 md:py-5 focus:outline-none text-white text-sm md:text-base resize-none max-h-48 scrollbar-none ${lang === 'ar' ? 'text-right font-academic' : ''}`}
+              placeholder={isCooldown ? (lang === 'ar' ? `يرجى الانتظار ${cooldownTimer} ثوانٍ...` : `Please wait ${cooldownTimer}s...`) : t.placeholder}
+              className={`w-full bg-transparent px-5 py-4 md:py-5 focus:outline-none text-white text-sm md:text-base resize-none max-h-48 scrollbar-none ${lang === 'ar' ? 'text-right font-academic' : ''} ${isCooldown ? 'cursor-not-allowed opacity-50' : ''}`}
             />
             <div className="p-2 md:p-3">
               <button 
                 type="submit" 
-                disabled={isLoading || !input.trim()} 
-                className="flex items-center justify-center w-10 h-10 md:w-12 md:h-12 bg-white text-black rounded-xl md:rounded-2xl hover:scale-105 active:scale-95 transition-all disabled:opacity-10"
+                disabled={isLoading || isCooldown || !input.trim()} 
+                className={`flex items-center justify-center w-10 h-10 md:w-12 md:h-12 rounded-xl md:rounded-2xl transition-all ${isCooldown ? 'bg-orange-500/10 text-orange-500/40 cursor-not-allowed' : 'bg-white text-black hover:scale-105 active:scale-95 disabled:opacity-10'}`}
               >
-                <svg className={`w-5 h-5 md:w-6 md:h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 12h14M12 5l7 7-7 7" />
-                </svg>
+                {isCooldown ? (
+                  <span className="text-xs font-black">{cooldownTimer}</span>
+                ) : (
+                  <svg className={`w-5 h-5 md:w-6 md:h-6 ${lang === 'ar' ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 12h14M12 5l7 7-7 7" />
+                  </svg>
+                )}
               </button>
             </div>
           </form>
