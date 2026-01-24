@@ -97,27 +97,27 @@ const throttleRequest = async () => {
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
-    await throttleRequest();
     const ai = getGeminiClient();
     chatSession = null;
     currentPdfBase64 = pdfBase64;
+    fullManuscriptText = ""; // Reset full text
 
-    // طلب البديهيات والبيانات الوصفية والنص الكامل بدقة عالية
-    // بفضل الـ Output Limit الجديد (65k)، يمكننا استخراج النص الكامل بأمان
-    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
+    // المرحلة الأولى: استخراج البيانات الوصفية، البديهيات، والـ 20% الأولى من النص
+    await throttleRequest();
+    const firstPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
 2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-3. Extract the FULL TEXT of this PDF accurately and comprehensively.
-4. Identify the Title, Author, and a brief list of Chapters/Structure.
+3. Identify the Title, Author, and a brief list of Chapters/Structure.
+4. Extract the FIRST 20% (Part 1/5) of the FULL TEXT of this PDF accurately and comprehensively.
 
-IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
+IMPORTANT: All extracted content MUST be in the SAME LANGUAGE as the PDF manuscript.
 Return ONLY JSON.`;
 
-    const response = await ai.models.generateContent({
+    const firstResponse = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: [{
         parts: [
           { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: combinedPrompt },
+          { text: firstPrompt },
         ],
       }],
       config: {
@@ -147,25 +147,57 @@ Return ONLY JSON.`;
                 chapters: { type: Type.STRING }
               }
             },
-            fullText: { type: Type.STRING }
+            textPart: { type: Type.STRING }
           },
-          required: ["axioms", "snippets", "metadata", "fullText"],
+          required: ["axioms", "snippets", "metadata", "textPart"],
         },
       },
     });
 
-    const result = JSON.parse(response.text || "{}");
-    manuscriptSnippets = result.snippets || [];
-    fullManuscriptText = result.fullText || "";
-    manuscriptMetadata = result.metadata || {};
+    const firstResult = JSON.parse(firstResponse.text || "{}");
+    manuscriptSnippets = firstResult.snippets || [];
+    manuscriptMetadata = firstResult.metadata || {};
+    fullManuscriptText += (firstResult.textPart || "");
+
+    // المراحل من 2 إلى 5: استخراج بقية أجزاء النص بالتوالي
+    for (let i = 2; i <= 5; i++) {
+      await throttleRequest();
+      const partPrompt = `Extract Part ${i}/5 of the FULL TEXT of this PDF accurately and comprehensively. 
+Start exactly where Part ${i-1} ended. Ensure no gaps in the text.
+Return ONLY JSON with a single property "textPart".`;
+
+      const partResponse = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: [{
+          parts: [
+            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+            { text: partPrompt },
+          ],
+        }],
+        config: {
+          systemInstruction: getSystemInstruction(lang),
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              textPart: { type: Type.STRING }
+            },
+            required: ["textPart"],
+          },
+        },
+      });
+
+      const partResult = JSON.parse(partResponse.text || "{}");
+      fullManuscriptText += (partResult.textPart || "");
+    }
     
     // تقطيع النص وتجهيزه للـ RAG في الخلفية
     documentChunks = chunkText(fullManuscriptText);
     
-    // توفير التوكنز: مسح الـ PDF بعد الاستخراج الأول
+    // توفير التوكنز: مسح الـ PDF بعد الاستخراج
     currentPdfBase64 = null; 
 
-    return result.axioms;
+    return firstResult.axioms;
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
     throw error;
