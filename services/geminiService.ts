@@ -42,7 +42,7 @@ export const getGeminiClient = () => {
   return new GoogleGenAI({ apiKey });
 };
 
-const MODEL_NAME = "gemini-2.5-flash-lite";
+const MODEL_NAME = "gemma-3-12b";
 
 /**
  * استعادة استراتيجية التقطيع الأصلية لضمان جودة السياق
