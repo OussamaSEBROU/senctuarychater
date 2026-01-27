@@ -13,6 +13,11 @@ let manuscriptMetadata: { title?: string; author?: string; chapters?: string; su
 let lastRequestTime = 0;
 const MIN_REQUEST_GAP = 3500; // فجوة زمنية ذكية لتجنب RPM limit
 
+// Groq Configuration - Secured via Environment Variables
+// Note: In Vite projects, use import.meta.env.VITE_...
+const GROQ_API_KEY = import.meta.env.VITE_GROQ_API_KEY;
+const GROQ_MODEL = "llama-3.3-70b-versatile";
+
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google or Gemini.
 ${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
@@ -37,12 +42,12 @@ RESPONSE ARCHITECTURE:
 If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
 
 export const getGeminiClient = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = import.meta.env.VITE_API_KEY || process.env.API_KEY;
   if (!apiKey || apiKey === "undefined") throw new Error("API_KEY_MISSING");
   return new GoogleGenAI({ apiKey });
 };
 
-const MODEL_NAME = "gemma-3-12b";
+const MODEL_NAME = "gemini-2.5-flash-lite";
 
 /**
  * استعادة استراتيجية التقطيع الأصلية لضمان جودة السياق
@@ -61,7 +66,7 @@ const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250
 };
 
 /**
- * استعادة منطق الاسترجاع الأصلي مع تحسين بسيط في النقاط لضمان الجودة
+ * استعادة منطق الاسترجاع الأصلية مع تحسين بسيط في النقاط لضمان الجودة
  */
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 2): string[] => {
   if (chunks.length === 0) return [];
@@ -97,25 +102,27 @@ const throttleRequest = async () => {
 
 export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<Axiom[]> => {
   try {
-    await throttleRequest();
     const ai = getGeminiClient();
     chatSession = null;
     currentPdfBase64 = pdfBase64;
+    fullManuscriptText = ""; // Reset full text
 
-    const combinedPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
+    // المرحلة الأولى: استخراج البيانات الوصفية، البديهيات، والـ 20% الأولى من النص
+    await throttleRequest();
+    const firstPrompt = `1. Extract exactly 13 high-quality 'Knowledge Axioms' from this manuscript.
 2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
-3. Extract the FULL TEXT of this PDF accurately.
-4. Identify the Title, Author, and a brief list of Chapters/Structure.
+3. Identify the Title, Author, and a brief list of Chapters/Structure.
+4. Extract the FIRST 20% (Part 1/5) of the FULL TEXT of this PDF accurately and comprehensively.
 
-IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
+IMPORTANT: All extracted content MUST be in the SAME LANGUAGE as the PDF manuscript.
 Return ONLY JSON.`;
 
-    const response = await ai.models.generateContent({
+    const firstResponse = await ai.models.generateContent({
       model: MODEL_NAME,
       contents: [{
         parts: [
           { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
-          { text: combinedPrompt },
+          { text: firstPrompt },
         ],
       }],
       config: {
@@ -145,23 +152,57 @@ Return ONLY JSON.`;
                 chapters: { type: Type.STRING }
               }
             },
-            fullText: { type: Type.STRING }
+            textPart: { type: Type.STRING }
           },
-          required: ["axioms", "snippets", "metadata", "fullText"],
+          required: ["axioms", "snippets", "metadata", "textPart"],
         },
       },
     });
 
-    const result = JSON.parse(response.text || "{}");
-    manuscriptSnippets = result.snippets || [];
-    fullManuscriptText = result.fullText || "";
-    manuscriptMetadata = result.metadata || {};
+    const firstResult = JSON.parse(firstResponse.text || "{}");
+    manuscriptSnippets = firstResult.snippets || [];
+    manuscriptMetadata = firstResult.metadata || {};
+    fullManuscriptText += (firstResult.textPart || "");
+
+    // المراحل من 2 إلى 5: استخراج بقية أجزاء النص بالتوالي
+    for (let i = 2; i <= 5; i++) {
+      await throttleRequest();
+      const partPrompt = `Extract Part ${i}/5 of the FULL TEXT of this PDF accurately and comprehensively. 
+Start exactly where Part ${i-1} ended. Ensure no gaps in the text.
+Return ONLY JSON with a single property "textPart".`;
+
+      const partResponse = await ai.models.generateContent({
+        model: MODEL_NAME,
+        contents: [{
+          parts: [
+            { inlineData: { data: pdfBase64, mimeType: "application/pdf" } },
+            { text: partPrompt },
+          ],
+        }],
+        config: {
+          systemInstruction: getSystemInstruction(lang),
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              textPart: { type: Type.STRING }
+            },
+            required: ["textPart"],
+          },
+        },
+      });
+
+      const partResult = JSON.parse(partResponse.text || "{}");
+      fullManuscriptText += (partResult.textPart || "");
+    }
+    
+    // تقطيع النص وتجهيزه للـ RAG في الخلفية
     documentChunks = chunkText(fullManuscriptText);
     
-    // توفير التوكنز: مسح الـ PDF بعد الاستخراج الأول
+    // توفير التوكنز: مسح الـ PDF بعد الاستخراج
     currentPdfBase64 = null; 
 
-    return result.axioms;
+    return firstResult.axioms;
   } catch (error: any) {
     console.error("Error in extractAxioms:", error);
     throw error;
@@ -170,33 +211,96 @@ Return ONLY JSON.`;
 
 export const getManuscriptSnippets = () => manuscriptSnippets;
 
+/**
+ * دالة الاتصال بـ Groq كخيار احتياطي
+ */
+const chatWithGroqStream = async (
+  prompt: string,
+  lang: Language,
+  onChunk: (text: string) => void
+): Promise<void> => {
+  try {
+    if (!GROQ_API_KEY) {
+      throw new Error("GROQ_API_KEY_MISSING");
+    }
+
+    const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Authorization": `Bearer ${GROQ_API_KEY}`,
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        model: GROQ_MODEL,
+        messages: [
+          { role: "system", content: getSystemInstruction(lang) },
+          { role: "user", content: prompt }
+        ],
+        temperature: 0.2,
+        stream: true
+      })
+    });
+
+    if (!response.ok) throw new Error(`Groq API Error: ${response.statusText}`);
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (!reader) return;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      
+      const chunk = decoder.decode(value);
+      const lines = chunk.split("\n");
+      
+      for (const line of lines) {
+        if (line.startsWith("data: ") && line !== "data: [DONE]") {
+          try {
+            const json = JSON.parse(line.substring(6));
+            const content = json.choices[0]?.delta?.content;
+            if (content) onChunk(content);
+          } catch (e) {
+            // تجاهل أخطاء الـ JSON الجزئية
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error("Groq Stream Error:", error);
+    throw error;
+  }
+};
+
 export const chatWithManuscriptStream = async (
   userPrompt: string,
   lang: Language,
   onChunk: (text: string) => void
 ): Promise<void> => {
-  const ai = getGeminiClient();
+  // استخدام نظام الـ RAG الموجود بدقة عالية بناءً على النص المستخرج مسبقاً
+  const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
+  
+  let augmentedPrompt = "";
+  const hasChunks = relevantChunks.length > 0;
 
-  try {
-    await throttleRequest();
-    const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
-    
-    let augmentedPrompt = "";
-    const hasChunks = relevantChunks.length > 0;
-
-    if (hasChunks) {
-      const contextText = relevantChunks.join("\n\n---\n\n");
-      augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
+  if (hasChunks) {
+    const contextText = relevantChunks.join("\n\n---\n\n");
+    augmentedPrompt = `CRITICAL CONTEXT FROM MANUSCRIPT:
 ${contextText}
 
 USER QUESTION:
 ${userPrompt}
 
 INSTRUCTION: You MUST answer based on the provided context. Adopt the author's style. Support your answer with direct quotes.`;
-    } else {
-      augmentedPrompt = `USER QUESTION: ${userPrompt}
+  } else {
+    augmentedPrompt = `USER QUESTION: ${userPrompt}
 INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's style. Be specific and provide quotes.`;
-    }
+  }
+
+  try {
+    await throttleRequest();
+    const ai = getGeminiClient();
 
     if (!chatSession) {
       chatSession = ai.chats.create({
@@ -208,7 +312,6 @@ INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's s
       });
     }
 
-    // إرسال الطلب مع الحفاظ على جودة الإجابة الأصلية
     const result = await chatSession.sendMessageStream({ message: augmentedPrompt });
 
     for await (const chunk of result) {
@@ -216,8 +319,8 @@ INSTRUCTION: Scan the entire manuscript to find the answer. Adopt the author's s
       if (chunkText) onChunk(chunkText);
     }
   } catch (error: any) {
-    console.error("Stream error in Service:", error);
-    chatSession = null;
-    throw error;
+    console.warn("Gemini failed or limit reached, switching to Groq...", error);
+    // في حال فشل Gemini، ننتقل تلقائياً لـ Groq
+    await chatWithGroqStream(augmentedPrompt, lang, onChunk);
   }
 };
