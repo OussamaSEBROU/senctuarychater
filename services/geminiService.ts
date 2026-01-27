@@ -3,7 +3,7 @@ import { Axiom, Language } from "../types";
 import * as pdfjs from 'pdfjs-dist';
 
 // إعداد عامل pdf.js لاستخراج النصوص في المتصفح
-pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`;
+pdfjs.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/\${pdfjs.version}/pdf.worker.min.js`;
 
 let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
@@ -16,10 +16,10 @@ const MIN_REQUEST_GAP = 1000;
 
 const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google, Gemini, or Groq.
-${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
-- Title: ${manuscriptMetadata.title}
-- Author: ${manuscriptMetadata.author}
-- Structure: ${manuscriptMetadata.chapters}` : ""}
+\${manuscriptMetadata.title ? \`CURRENT MANUSCRIPT CONTEXT:
+- Title: \${manuscriptMetadata.title}
+- Author: \${manuscriptMetadata.author}
+- Structure: \${manuscriptMetadata.chapters}\` : ""}
 
 MANDATORY OPERATIONAL PROTOCOL:
 1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
@@ -60,7 +60,7 @@ const chunkText = (text: string, chunkSize: number = 1800, overlap: number = 250
 
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 5): string[] => {
   if (chunks.length === 0) return [];
-  const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 3);
+  const queryWords = query.toLowerCase().split(/\\s+/).filter(w => w.length > 3);
   const MIN_SCORE_THRESHOLD = 2; 
 
   const scoredChunks = chunks.map(chunk => {
@@ -106,7 +106,7 @@ const extractTextFromPdf = async (pdfBase64: string): Promise<string> => {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
       const pageText = textContent.items.map((item: any) => item.str).join(" ");
-      fullText += pageText + "\n";
+      fullText += pageText + "\\n";
     }
     
     return fullText;
@@ -125,7 +125,7 @@ export const extractAxioms = async (pdfBase64: string, lang: Language): Promise<
     fullManuscriptText = extractedText;
     documentChunks = chunkText(fullManuscriptText);
 
-    const combinedPrompt = `You are analyzing a manuscript. Based on the following text, perform these tasks:
+    const combinedPrompt = \`You are analyzing a manuscript. Based on the following text, perform these tasks:
 1. Extract exactly 13 high-quality 'Knowledge Axioms'.
 2. Extract 10 short, profound, and useful snippets or quotes DIRECTLY from the text (verbatim).
 3. Identify the Title, Author, and a brief list of Chapters/Structure.
@@ -141,7 +141,7 @@ Return ONLY a JSON object with this structure:
   "metadata": {"title": "...", "author": "...", "chapters": "..."},
   "fullText": "..." 
 }
-Return ONLY JSON.`;
+Return ONLY JSON.\`;
 
     const completion = await groq.chat.completions.create({
       model: MODEL_NAME,
