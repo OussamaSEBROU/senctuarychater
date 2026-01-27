@@ -1,9 +1,10 @@
 import Groq from "groq-sdk";
 import { Axiom, Language } from "../types";
-import * as pdfjs from 'pdfjs-dist';
+// استيراد النسخة المتوافقة مع المتصفح مباشرة
+import * as pdfjs from 'pdfjs-dist/build/pdf';
 
-// استخدام الرابط المباشر للعامل لضمان التوافق مع Vite و Render
-pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@\${pdfjs.version}/build/pdf.worker.min.mjs`;
+// إعداد العامل من رابط خارجي مستقر
+pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js`;
 
 let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
@@ -13,7 +14,7 @@ let manuscriptMetadata: { title?: string; author?: string; chapters?: string; su
 let lastRequestTime = 0;
 const MIN_REQUEST_GAP = 1000; 
 
-const getSystemInstruction = (lang: Language) => \`You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
+const getSystemInstruction = (lang: Language) => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure.
 IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google, Gemini, or Groq.
 \${manuscriptMetadata.title ? \`CURRENT MANUSCRIPT CONTEXT:
 - Title: \${manuscriptMetadata.title}
@@ -34,7 +35,7 @@ RESPONSE ARCHITECTURE:
 - ELABORATE: Provide comprehensive, detailed, and in-depth answers. Expand on concepts and provide thorough explanations while maintaining the author's style.
 - BE SUPER FAST.
 
-If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".\`;
+If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
 
 export const getGroqClient = () => {
   const apiKey = process.env.API_KEY;
@@ -104,7 +105,7 @@ const extractTextFromPdf = async (pdfBase64: string): Promise<string> => {
     for (let i = 1; i <= pdf.numPages; i++) {
       const page = await pdf.getPage(i);
       const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => (item as any).str).join(" ");
+      const pageText = textContent.items.map((item: any) => item.str).join(" ");
       fullText += pageText + "\\n";
     }
     
