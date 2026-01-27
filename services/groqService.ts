@@ -229,3 +229,4 @@ export const chatWithManuscriptStream = async (
 };
 
 export const getManuscriptSnippets = () => manuscriptSnippets;
+
