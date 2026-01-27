@@ -5,7 +5,7 @@ import { extractAxioms } from './services/groqService';
 import AxiomCard from './components/AxiomCard';
 import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
-import ManuscriptViewer from './components/ManuscriptViewer';
+import { ManuscriptViewer } from './components/ManuscriptViewer';
 import { translations } from './translations';
 
 // مصفوفة المقولات المختارة بعناية من المصادر المحددة
@@ -73,6 +73,7 @@ function App() {
   const [isExtracting, setIsExtracting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [currentQuote, setCurrentQuote] = useState('');
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const t = translations[lang];
 
   useEffect(() => {
@@ -115,6 +116,12 @@ function App() {
     reader.readAsDataURL(file);
   };
 
+  const handleNewChat = () => {
+    setPdf(null);
+    setAxioms([]);
+    setError(null);
+  };
+
   return (
     <div className="min-h-screen bg-[#020617] text-slate-200 font-sans selection:bg-blue-500/30">
       {/* Background Effects */}
@@ -125,12 +132,26 @@ function App() {
       </div>
 
       <div className="relative flex h-screen overflow-hidden">
-        <Sidebar lang={lang} setLang={setLang} />
+        <Sidebar 
+          isOpen={isSidebarOpen} 
+          onClose={() => setIsSidebarOpen(false)} 
+          lang={lang} 
+          setLang={setLang} 
+          onNewChat={handleNewChat} 
+        />
 
         <main className="flex-1 flex flex-col min-w-0">
           {/* Header */}
           <header className="h-20 border-b border-white/5 bg-slate-950/50 backdrop-blur-md flex items-center justify-between px-8 shrink-0">
             <div className="flex items-center gap-4">
+              <button 
+                onClick={() => setIsSidebarOpen(true)}
+                className="p-2 hover:bg-white/5 rounded-lg transition-colors lg:hidden"
+              >
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" />
+                </svg>
+              </button>
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-900/20">
                 <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.747 0 3.332.477 4.5 1.253v13C19.832 18.477 18.247 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
@@ -138,7 +159,7 @@ function App() {
               </div>
               <div>
                 <h1 className="text-xl font-bold text-white tracking-tight">{t.title}</h1>
-                <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">{t.subtitle}</p>
+                <p className="text-xs text-slate-400 font-medium uppercase tracking-widest">{t.sanctuary}</p>
               </div>
             </div>
 
@@ -153,7 +174,7 @@ function App() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                   </svg>
-                  <span className="font-semibold text-sm">{t.uploadBtn}</span>
+                  <span className="font-semibold text-sm">{t.upload}</span>
                   <input type="file" className="hidden" accept=".pdf" onChange={handleFileUpload} />
                 </label>
               )}
@@ -212,7 +233,7 @@ function App() {
                         </div>
                       </div>
                       <div className="text-center space-y-2">
-                        <h3 className="text-xl font-bold text-white">{t.extracting}</h3>
+                        <h3 className="text-xl font-bold text-white">{t.synthesis}</h3>
                         <p className="text-sm text-slate-400">{lang === 'ar' ? 'جاري استخراج الأفكار الجوهرية...' : 'Extracting core intellectual axioms...'}</p>
                       </div>
                     </div>
@@ -224,7 +245,7 @@ function App() {
                         ))}
                       </div>
                       <div className="flex-1 min-h-0">
-                        <ManuscriptViewer pdf={pdf} />
+                        <ManuscriptViewer pdf={pdf} lang={lang} />
                       </div>
                     </>
                   )}
