@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "groq-sdk": "^0.37.0",
-    "pdfjs-dist": "^5.4.530",
+    "pdfjs-dist": "3.11.174",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-markdown": "^9.0.1",
@@ -33,14 +33,4 @@
 }
 
 
-"dependencies": {
-  "groq-sdk": "^0.37.0",
-  "pdfjs-dist": "3.11.174",
-  "react": "^18.2.0",
-  "react-dom": "^18.2.0",
-  "react-markdown": "^9.0.1",
-  "react-syntax-highlighter": "^15.5.0",
-  "rehype-katex": "^7.0.0",
-  "remark-math": "^6.0.0"
-}
 
