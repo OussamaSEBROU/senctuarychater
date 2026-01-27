@@ -251,7 +251,7 @@ const ChatInterface: React.FC<ChatInterfaceProps> = ({ lang }) => {
                 handleSend();
               }
             }}
-            placeholder={isCooldown ? (lang === 'ar' ? 'يرجى الانتظار...' : 'Please wait...') : t.chatPlaceholder}
+            placeholder={isCooldown ? (lang === 'ar' ? 'يرجى الانتظار...' : 'Please wait...') : t.placeholder}
             disabled={isLoading || isCooldown}
             className="w-full bg-slate-950/50 text-slate-200 rounded-2xl px-6 py-4 pr-16 border border-white/10 focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500/50 transition-all resize-none h-[60px] custom-scrollbar disabled:opacity-50"
           />
