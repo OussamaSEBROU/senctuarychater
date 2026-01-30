@@ -39,6 +39,9 @@ const performOCR = async (
     onProgress?.("Initializing OCR Engine...", 0.1);
 
     const worker = await createWorker('eng+ara'); // Supports English & Arabic
+    await worker.setParameters({
+        tessedit_pageseg_mode: '1', // PSM_AUTO_OSD. Good for full page blocks
+    });
 
     let fullText = "";
     const pagesToScan = Math.min(pdfProxy.numPages, maxPages);
@@ -49,7 +52,7 @@ const performOCR = async (
         const page = await pdfProxy.getPage(pageNum);
 
         // Render page to canvas for OCR
-        const viewport = page.getViewport({ scale: 1.5 }); // 1.5x scale for better accuracy
+        const viewport = page.getViewport({ scale: 2.0 }); // Increased scale for better accuracy
         const canvas = document.createElement('canvas');
         const context = canvas.getContext('2d');
         canvas.height = viewport.height;
@@ -67,7 +70,9 @@ const performOCR = async (
         const { data: { text } } = await worker.recognize(blob);
 
         if (text.trim().length > 0) {
-            fullText += `--- Page ${pageNum} (OCR) ---\n${text}\n\n`;
+            // Clean text: Collapse multiple spaces/newlines to single space for better RAG
+            const cleanText = text.replace(/\s+/g, ' ').trim();
+            fullText += `--- Page ${pageNum} (OCR) ---\n${cleanText}\n\n`;
         }
     }
 
@@ -110,7 +115,7 @@ export const extractPDFContent = async (
         console.log("OCR Service: Minimal text found. Switching to OCR mode...");
         onProgress?.("Scanned Document Detected. Starting OCR...", 0.2);
 
-        const ocrText = await performOCR(pdf, 50, onProgress);
+        const ocrText = await performOCR(pdf, 120, onProgress);
 
         if (!ocrText || ocrText.trim().length < 20) {
             throw new Error("EMPTY_TEXT_AFTER_OCR");
