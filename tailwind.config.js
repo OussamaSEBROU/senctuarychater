@@ -1,12 +1,28 @@
-
 /** @type {import('tailwindcss').Config} */
-export default {
+module.exports = {
   content: [
     "./index.html",
-    "./**/*.{js,ts,jsx,tsx}",
+    "./components/**/*.{js,ts,jsx,tsx}",
+    "./services/**/*.{js,ts,jsx,tsx}",
+    "./*.{js,ts,jsx,tsx}",
+    // Exclude node_modules explicitly
+    "!./node_modules/**"
   ],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        'accent-orange': '#a34a28',
+      },
+      fontFamily: {
+        sans: ['Montserrat', 'sans-serif'],
+        academic: ['Crimson Pro', 'Montserrat Arabic', 'serif'],
+      },
+      animation: {
+        'fade-in': 'fadeIn 0.5s ease-out forwards',
+      },
+    },
   },
-  plugins: [],
+  plugins: [
+    require('@tailwindcss/typography'),
+  ],
 }
