@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { Axiom, PDFData, Language } from './types';
 import { extractAxioms, resetGenAISession } from './services/groqService';
@@ -200,8 +199,8 @@ const App: React.FC = () => {
         }
 
         // Check file size limit
-        if (file.size > 20 * 1024 * 1024) {
-            setError(lang === 'ar' ? "حجم الملف كبير جداً (الحد الأقصى 20 ميجابايت)." : "File too large (Max 20MB).");
+        if (file.size > 50 * 1024 * 1024) {
+            setError(lang === 'ar' ? "حجم الملف كبير جداً (الحد الأقصى 50 ميجابايت)." : "File too large (Max 50MB).");
             return;
         }
 
