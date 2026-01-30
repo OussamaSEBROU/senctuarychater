@@ -68,7 +68,7 @@ export const getGroqClient = (): Groq => {
     return new Groq({ apiKey, dangerouslyAllowBrowser: true });
 };
 
-const MODEL_NAME = "llama-3.3-70b-versatile";
+const MODEL_NAME = "moonshotai/kimi-k2-instruct-0905";
 
 /**
  * 1. Strategic Chunking (1800 chars / 250 overlap)
@@ -157,6 +157,8 @@ TASK:
 1. Extract 13 "Knowledge Axioms" (Deep, timeless truths/concepts).
 2. Extract 10 verbatim snippets/quotes.
 3. Identify Metadata (Title, Author, Chapter structure).
+IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
+
 
 OUTPUT JSON FORMAT:
 {
@@ -271,3 +273,4 @@ INSTRUCTION: You MUST answer based on the provided context. Adopt the author's s
         throw error;
     }
 };
+
