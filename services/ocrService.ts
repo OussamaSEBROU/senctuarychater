@@ -1,213 +1,90 @@
 /**
  * OCR Service - Multi-language PDF Text Extraction
- * Supports Arabic, English, and other languages
- * Uses PDF.js for text extraction and Tesseract.js for OCR on scanned documents
+ * Simplified & Robust version using PDF.js
  */
 
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Initialize PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs`;
-
-/**
- * Check if text is mostly empty/whitespace (indicates scanned PDF)
- */
-const isTextEmpty = (text: string): boolean => {
-    const cleanText = text.replace(/\s+/g, '').trim();
-    return cleanText.length < 100; // Less than 100 characters suggests scanned PDF
-};
-
-/**
- * Detect if document needs OCR based on text content
- */
-const needsOCR = (extractedText: string): boolean => {
-    // If very little text extracted, likely a scanned document
-    if (isTextEmpty(extractedText)) return true;
-
-    // Check for gibberish patterns that indicate failed text extraction
-    const gibberishPattern = /[\x00-\x08\x0B\x0C\x0E-\x1F]/g;
-    const gibberishMatches = extractedText.match(gibberishPattern);
-    if (gibberishMatches && gibberishMatches.length > extractedText.length * 0.1) {
-        return true;
-    }
-
-    return false;
-};
+// Explicitly set worker URL to a reliable CDN matching the version
+// Using unpkg which is generally faster/more reliable for this library
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.js`;
 
 /**
  * Extract text from PDF using PDF.js
  */
 const extractTextFromPDF = async (pdfBase64: string): Promise<string> => {
     try {
-        // Convert base64 to Uint8Array
+        console.log("OCR Service: decoding base64...");
         const binaryString = atob(pdfBase64);
         const bytes = new Uint8Array(binaryString.length);
         for (let i = 0; i < binaryString.length; i++) {
             bytes[i] = binaryString.charCodeAt(i);
         }
 
-        // Load PDF document
-        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
+        console.log("OCR Service: Loading PDF Document...");
+        const loadingTask = pdfjsLib.getDocument({ data: bytes });
+        const pdf = await loadingTask.promise;
+
         const numPages = pdf.numPages;
+        console.log(`OCR Service: PDF Loaded with ${numPages} pages.`);
+
         let fullText = "";
 
-        console.log(`PDF loaded: ${numPages} pages`);
+        // Limit pages to avoid timeout on large docs (Max 20 pages for demo)
+        const maxPages = Math.min(numPages, 30);
 
-        // Extract text from each page
-        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
-            const page = await pdf.getPage(pageNum);
-            const textContent = await page.getTextContent();
-
-            // Combine text items with proper spacing
-            const pageText = textContent.items
-                .map((item: any) => item.str)
-                .join(' ');
-
-            fullText += pageText + "\n\n";
-        }
-
-        return fullText.trim();
-    } catch (error) {
-        console.error("Error extracting text from PDF:", error);
-        throw error;
-    }
-};
-
-/**
- * Perform OCR on PDF pages using Tesseract.js
- * Dynamically imports Tesseract for better performance
- */
-const performOCROnPDF = async (
-    pdfBase64: string,
-    onProgress?: (progress: number) => void
-): Promise<string> => {
-    try {
-        // Dynamic import for Tesseract
-        const Tesseract = await import('tesseract.js');
-
-        // Convert base64 to Uint8Array
-        const binaryString = atob(pdfBase64);
-        const bytes = new Uint8Array(binaryString.length);
-        for (let i = 0; i < binaryString.length; i++) {
-            bytes[i] = binaryString.charCodeAt(i);
-        }
-
-        // Load PDF document
-        const pdf = await pdfjsLib.getDocument({ data: bytes }).promise;
-        const numPages = Math.min(pdf.numPages, 50); // Limit pages for performance
-        let fullText = "";
-
-        console.log(`Starting OCR on ${numPages} pages...`);
-
-        // Create worker for OCR
-        const worker = await Tesseract.createWorker('ara+eng+fra+deu+spa+ita+por+rus+chi_sim+jpn+kor', 1, {
-            logger: (m) => {
-                if (m.status === 'recognizing text' && onProgress) {
-                    onProgress(m.progress);
-                }
-            }
-        });
-
-        for (let pageNum = 1; pageNum <= numPages; pageNum++) {
+        for (let pageNum = 1; pageNum <= maxPages; pageNum++) {
             try {
                 const page = await pdf.getPage(pageNum);
-                const scale = 2.0; // Higher scale for better OCR accuracy
-                const viewport = page.getViewport({ scale });
+                const textContent = await page.getTextContent();
 
-                // Create canvas for rendering
-                const canvas = document.createElement('canvas');
-                const context = canvas.getContext('2d');
-                if (!context) continue;
+                // Improved text stitching
+                const pageText = textContent.items
+                    .map((item: any) => item.str)
+                    .join(' ');
 
-                canvas.height = viewport.height;
-                canvas.width = viewport.width;
-
-                // Render page to canvas
-                await page.render({
-                    canvasContext: context,
-                    viewport: viewport
-                }).promise;
-
-                // Convert canvas to image data
-                const imageData = canvas.toDataURL('image/png');
-
-                // Perform OCR on the image
-                const { data: { text } } = await worker.recognize(imageData);
-                fullText += text + "\n\n";
-
-                console.log(`OCR completed for page ${pageNum}/${numPages}`);
-
-                if (onProgress) {
-                    onProgress(pageNum / numPages);
+                // Add minimal cleanup
+                if (pageText.trim().length > 0) {
+                    fullText += `--- Page ${pageNum} ---\n${pageText}\n\n`;
                 }
             } catch (pageError) {
-                console.error(`Error processing page ${pageNum}:`, pageError);
-                continue;
+                console.warn(`OCR Service: Skipped page ${pageNum} due to error`, pageError);
+                continue; // Keep going even if one page fails
             }
         }
 
-        await worker.terminate();
         return fullText.trim();
     } catch (error) {
-        console.error("Error performing OCR:", error);
-        throw error;
+        console.error("OCR Service Critical Error:", error);
+        // Return empty string to allow handling upstream rather than crashing
+        throw new Error("PDF_READ_FAILED: " + (error as any).message);
     }
 };
 
 /**
- * Main PDF extraction function
- * Automatically detects if OCR is needed and applies it
+ * Main PDF extraction function with validation
  */
 export const extractPDFContent = async (
     pdfBase64: string,
     onProgress?: (status: string, progress: number) => void
 ): Promise<string> => {
     try {
-        onProgress?.("Extracting text from PDF...", 0.1);
+        onProgress?.("Loading PDF Worker...", 0.1);
 
-        // First, try native text extraction (fastest)
-        const nativeText = await extractTextFromPDF(pdfBase64);
+        const extractedText = await extractTextFromPDF(pdfBase64);
 
-        // Check if we got meaningful text
-        if (!needsOCR(nativeText)) {
-            console.log("Native text extraction successful");
-            onProgress?.("Text extraction complete", 1.0);
-            return nativeText;
+        if (!extractedText || extractedText.length < 20) {
+            console.warn("OCR Service: Text extraction yielded empty result.");
+            throw new Error("EMPTY_TEXT_EXTRACTED");
         }
 
-        console.log("Native extraction yielded little text, attempting OCR...");
-        onProgress?.("Scanned document detected, starting OCR...", 0.2);
+        console.log(`OCR Service: Success! Extracted ${extractedText.length} chars.`);
+        onProgress?.("Processing text...", 0.9);
 
-        // If native extraction failed, use OCR
-        const ocrText = await performOCROnPDF(pdfBase64, (progress) => {
-            onProgress?.("Performing OCR...", 0.2 + progress * 0.8);
-        });
-
-        // Combine both results if native had some text
-        const combinedText = nativeText.length > 0
-            ? `${nativeText}\n\n--- OCR EXTRACTED TEXT ---\n\n${ocrText}`
-            : ocrText;
-
-        onProgress?.("OCR complete", 1.0);
-        return combinedText;
+        return extractedText;
 
     } catch (error) {
-        console.error("Error in PDF content extraction:", error);
+        console.error("OCR Workflow Failed:", error);
         throw error;
     }
-};
-
-/**
- * Quick text extraction without OCR (for fast initial processing)
- */
-export const quickExtractPDF = async (pdfBase64: string): Promise<string> => {
-    return extractTextFromPDF(pdfBase64);
-};
-
-/**
- * Check if PDF needs OCR processing
- */
-export const checkPDFNeedsOCR = async (pdfBase64: string): Promise<boolean> => {
-    const text = await extractTextFromPDF(pdfBase64);
-    return needsOCR(text);
 };
