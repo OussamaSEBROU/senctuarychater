@@ -4,16 +4,28 @@
  * 1. Hybrid Search Algorithm (Density + Proximity)
  * 2. Context Expansion (Sliding Window retrieval)
  * 3. Ephemeral Memory (Low Token Usage)
+ * 4. Strict Session Reset (Fixes data mixing)
  */
 
 import Groq from "groq-sdk";
 import { Axiom, Language } from "../types";
 
-// State
+// Global State
 let conversationHistory: { role: "system" | "user" | "assistant"; content: string }[] = [];
 let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
 let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
+
+/**
+ * RESET FUNCTION - CRITICAL FOR PREVENTING DATA MIXING
+ */
+export const resetGenAISession = () => {
+    conversationHistory = [];
+    manuscriptSnippets = [];
+    documentChunks = [];
+    manuscriptMetadata = {};
+    console.log("Create New Session: Memory Wiped Sucessfully.");
+};
 
 /**
  * Enhanced System Persona
@@ -40,7 +52,6 @@ const MODEL_NAME = "llama-3.3-70b-versatile";
 
 /**
  * 1. Chunking with Indexing
- * Stores index to allow fetching neighbors later
  */
 const chunkText = (text: string, chunkSize: number = 1000, overlap: number = 200): string[] => {
     const chunks: string[] = [];
@@ -55,12 +66,11 @@ const chunkText = (text: string, chunkSize: number = 1000, overlap: number = 200
 };
 
 /**
- * 2. Advanced Retrieval Logic (The Brain of RAG)
+ * 2. Advanced Retrieval Logic
  */
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 3): string[] => {
     if (chunks.length === 0) return [];
 
-    // Filter insignificant words for better matching
     const stopWords = new Set(['the', 'and', 'is', 'in', 'it', 'to', 'of', 'for', 'on', 'this', 'that', 'fi', 'min', 'ila', 'ala']);
     const queryWords = query.toLowerCase()
         .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
@@ -73,17 +83,12 @@ const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 
         let matches = 0;
 
         queryWords.forEach(word => {
-            // Base score for existence
             if (chunkLower.includes(word)) {
                 score += 5;
                 matches++;
-
-                // Boost for specific phrases (exact matches of pairs)
-                // (Simple optimization)
             }
         });
 
-        // Density Boost: More matches in shorter text = explicit focus
         if (matches > 1) {
             score *= 1.5;
         }
@@ -91,26 +96,19 @@ const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 
         return { index, chunk, score };
     });
 
-    // Sort by score
     const topResults = scoredChunks
         .sort((a, b) => b.score - a.score)
         .filter(item => item.score > 0)
         .slice(0, topK);
 
-    // 3. Context Expansion (Smart Window)
-    // Instead of just returning the chunk, grab its neighbors!
-    // This ensures we don't cut off a sentence or an idea.
+    // Context Expansion
     const expandedContexts = topResults.map(item => {
         const prev = chunks[item.index - 1] || "";
         const current = item.chunk;
         const next = chunks[item.index + 1] || "";
-
-        // Combine to form a "Super Chunk" (~3000 chars)
-        // Overlap handling is rough here but fine for LLM context
         return `...${prev.slice(-300)} ${current} ${next.slice(0, 300)}...`;
     });
 
-    // Remove duplicates if neighbor logic overlapped
     return [...new Set(expandedContexts)];
 };
 
@@ -132,11 +130,13 @@ const extractJSON = (text: string): any => {
  */
 export const extractAxioms = async (extractedText: string, lang: Language): Promise<Axiom[]> => {
     try {
+        // CRITICAL: Ensure clean slate for new file
+        resetGenAISession();
+
         const groq = getGroqClient();
-        conversationHistory = [];
         documentChunks = chunkText(extractedText);
 
-        // Initial analysis on first ~15k chars to save tokens
+        // Initial analysis on first ~15k chars
         const analysisText = extractedText.substring(0, 15000);
 
         const combinedPrompt = `Analyze text & return JSON.
@@ -145,7 +145,7 @@ TASK:
 1. Extract 13 "Knowledge Axioms" (Deep, timeless truths).
 2. Extract 10 verbatim snippets.
 3. Metadata (Title, Author).
-FORMAT: {"axioms": [{"term": "", "definition": "", "significance": ""}], "snippets": [], "metadata": {"title": "", "author": ""}}`;
+FORMAT: {"axioms": [{"term": "", "definition": "", "significance": "..."}], "snippets": [], "metadata": {"title": "", "author": ""}}`;
 
         const response = await groq.chat.completions.create({
             model: MODEL_NAME,
@@ -186,12 +186,9 @@ export const chatWithManuscriptStream = async (
     const groq = getGroqClient();
 
     try {
-        // 1. Smart Retrieval with Context Expansion
         const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks, 3);
         const contextText = relevantChunks.join("\n\n---\n\n");
 
-        // 2. Ephemeral Prompt Construction
-        // Included context is NOT saved to permanent history to keep tokens low
         const ephemeralUserMessage = `
 CRITICAL CONTEXT FROM MANUSCRIPT:
 """
@@ -202,10 +199,9 @@ USER QUESTION: ${userPrompt}
 
 INSTRUCTION: Answer deeply using ONLY the context above. Adopt author's style.`;
 
-        // 3. Prepare minimal history for API
         const messagesForAPI = [
-            ...conversationHistory, // Just previous Qs & As
-            { role: "user", content: ephemeralUserMessage } // Current Q + Heavy Context
+            ...conversationHistory,
+            { role: "user", content: ephemeralUserMessage }
         ];
 
         const stream = await groq.chat.completions.create({
@@ -213,7 +209,7 @@ INSTRUCTION: Answer deeply using ONLY the context above. Adopt author's style.`;
             // @ts-ignore
             messages: messagesForAPI,
             temperature: 0.3,
-            max_tokens: 1500, // Generous output limit for deep answers
+            max_tokens: 1500,
             stream: true,
         });
 
@@ -226,11 +222,9 @@ INSTRUCTION: Answer deeply using ONLY the context above. Adopt author's style.`;
             }
         }
 
-        // 4. Update History (Pure Q&A only)
         conversationHistory.push({ role: "user", content: userPrompt });
         conversationHistory.push({ role: "assistant", content: fullResponse });
 
-        // Prune history
         if (conversationHistory.length > 13) {
             conversationHistory = [conversationHistory[0], ...conversationHistory.slice(-12)];
         }
