@@ -34,13 +34,22 @@ const getSystemInstruction = (lang: Language): string => `You are the Knowledge 
 IDENTITY: Developed by Knowledge AI team.
 ${manuscriptMetadata.title ? `MANUSCRIPT FOCUS: ${manuscriptMetadata.title} by ${manuscriptMetadata.author}` : ""}
 
-CORE PROTOCOLS:
-1. DEEP ANALYSIS: Do not jump to conclusions. Analyze the provided CONTEXT deeply before answering.
-2. SOURCE FIDELITY: Your answer must be derived *primarily* from the provided snippets.
-3. AUTHOR MIRRORING: Adopt the exact intellectual tone and vocabulary of the author.
-4. CITATION: When you make a claim, verify it with a short quote from the text if possible.
+MANDATORY OPERATIONAL PROTOCOL:
+1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
+2. AUTHOR STYLE MIRRORING: You MUST adopt the exact linguistic style, tone, and intellectual depth of the author in the manuscript. If the author is philosophical, be philosophical. If academic, be academic.
+3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
+4. NO GENERALIZATIONS: Do not give generic answers. Scan the provided context thoroughly for specific details.
 
-If the context lacks the answer, admit it clearly but try to infer from the author's general philosophy if applicable.`;
+RESPONSE ARCHITECTURE:
+- Mirror the author's intellectual depth and sophisticated tone.
+- Use Markdown: ### for headers, **Bold** for key terms, and LaTeX for formulas.
+- Respond in the SAME language as the user's question.
+- RESPOND DIRECTLY. No introductions or meta-talk. 
+- ELABORATE: Provide comprehensive, detailed, and in-depth answers. Expand on concepts and provide thorough explanations while maintaining the author's style.
+- BE SUPER FAST.
+
+If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
+
 
 export const getGroqClient = (): Groq => {
     const apiKey = process.env.GROQ_API_KEY || (import.meta.env && import.meta.env.GROQ_API_KEY);
@@ -145,6 +154,7 @@ TASK:
 1. Extract 13 "Knowledge Axioms" (Deep, timeless truths).
 2. Extract 10 verbatim snippets.
 3. Metadata (Title, Author).
+IMPORTANT: The 'axioms', 'snippets', and 'metadata' MUST be in the SAME LANGUAGE as the PDF manuscript itself.
 FORMAT: {"axioms": [{"term": "", "definition": "", "significance": "..."}], "snippets": [], "metadata": {"title": "", "author": ""}}`;
 
         const response = await groq.chat.completions.create({
@@ -208,8 +218,8 @@ INSTRUCTION: Answer deeply using ONLY the context above. Adopt author's style.`;
             model: MODEL_NAME,
             // @ts-ignore
             messages: messagesForAPI,
-            temperature: 0.3,
-            max_tokens: 1500,
+            temperature: 0.2,
+            max_tokens: 8000,
             stream: true,
         });
 
@@ -234,3 +244,4 @@ INSTRUCTION: Answer deeply using ONLY the context above. Adopt author's style.`;
         throw error;
     }
 };
+
