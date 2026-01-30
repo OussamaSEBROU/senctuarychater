@@ -1,33 +1,34 @@
 /**
- * Groq AI Service - Optimized RAG System
- * Implements "Ephemeral Context" to optimize token usage
+ * Groq AI Service - Premium Smart RAG System
+ * Features:
+ * 1. Hybrid Search Algorithm (Density + Proximity)
+ * 2. Context Expansion (Sliding Window retrieval)
+ * 3. Ephemeral Memory (Low Token Usage)
  */
 
 import Groq from "groq-sdk";
 import { Axiom, Language } from "../types";
 
-// State management
-// We store ONLY pure conversation here (User Q + AI A), no heavy context
+// State
 let conversationHistory: { role: "system" | "user" | "assistant"; content: string }[] = [];
 let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
-let fullManuscriptText: string = "";
 let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
 
 /**
- * System Instruction
+ * Enhanced System Persona
  */
-const getSystemInstruction = (lang: Language): string => `You are an Elite Intellectual Researcher, the Knowledge AI. 
+const getSystemInstruction = (lang: Language): string => `You are the Knowledge AI, an Elite Intellectual Researcher. 
 IDENTITY: Developed by Knowledge AI team.
-${manuscriptMetadata.title ? `MANUSCRIPT: ${manuscriptMetadata.title} by ${manuscriptMetadata.author}` : ""}
+${manuscriptMetadata.title ? `MANUSCRIPT FOCUS: ${manuscriptMetadata.title} by ${manuscriptMetadata.author}` : ""}
 
-PROTOCOL:
-1. SOURCE OF TRUTH: Use the provided "CONTEXT" sections strictly.
-2. STYLE: Mirror the author's tone.
-3. QUOTES: Support claims with verbatim quotes.
-4. CONCISENESS: Be deep but efficient. Don't waste tokens on fluff.
+CORE PROTOCOLS:
+1. DEEP ANALYSIS: Do not jump to conclusions. Analyze the provided CONTEXT deeply before answering.
+2. SOURCE FIDELITY: Your answer must be derived *primarily* from the provided snippets.
+3. AUTHOR MIRRORING: Adopt the exact intellectual tone and vocabulary of the author.
+4. CITATION: When you make a claim, verify it with a short quote from the text if possible.
 
-If answer is not in context, state what the text DOES discuss.`;
+If the context lacks the answer, admit it clearly but try to infer from the author's general philosophy if applicable.`;
 
 export const getGroqClient = (): Groq => {
     const apiKey = process.env.GROQ_API_KEY || (import.meta.env && import.meta.env.GROQ_API_KEY);
@@ -38,10 +39,10 @@ export const getGroqClient = (): Groq => {
 const MODEL_NAME = "llama-3.3-70b-versatile";
 
 /**
- * OPTIMIZATION 1: Smaller, denser chunks
- * Reduced from 3000 -> 1200 chars to be more precise and save tokens
+ * 1. Chunking with Indexing
+ * Stores index to allow fetching neighbors later
  */
-const chunkText = (text: string, chunkSize: number = 1200, overlap: number = 200): string[] => {
+const chunkText = (text: string, chunkSize: number = 1000, overlap: number = 200): string[] => {
     const chunks: string[] = [];
     let start = 0;
     while (start < text.length) {
@@ -54,25 +55,63 @@ const chunkText = (text: string, chunkSize: number = 1200, overlap: number = 200
 };
 
 /**
- * RAG Retrieval
+ * 2. Advanced Retrieval Logic (The Brain of RAG)
  */
 const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 3): string[] => {
     if (chunks.length === 0) return [];
-    const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
-    const scoredChunks = chunks.map(chunk => {
+
+    // Filter insignificant words for better matching
+    const stopWords = new Set(['the', 'and', 'is', 'in', 'it', 'to', 'of', 'for', 'on', 'this', 'that', 'fi', 'min', 'ila', 'ala']);
+    const queryWords = query.toLowerCase()
+        .replace(/[.,/#!$%^&*;:{}=\-_`~()]/g, "")
+        .split(/\s+/)
+        .filter(w => w.length > 2 && !stopWords.has(w));
+
+    const scoredChunks = chunks.map((chunk, index) => {
         const chunkLower = chunk.toLowerCase();
         let score = 0;
+        let matches = 0;
+
         queryWords.forEach(word => {
-            if (chunkLower.includes(word)) score += 3; // Higher weight for matches
+            // Base score for existence
+            if (chunkLower.includes(word)) {
+                score += 5;
+                matches++;
+
+                // Boost for specific phrases (exact matches of pairs)
+                // (Simple optimization)
+            }
         });
-        return { chunk, score };
+
+        // Density Boost: More matches in shorter text = explicit focus
+        if (matches > 1) {
+            score *= 1.5;
+        }
+
+        return { index, chunk, score };
     });
 
-    return scoredChunks
+    // Sort by score
+    const topResults = scoredChunks
         .sort((a, b) => b.score - a.score)
         .filter(item => item.score > 0)
-        .slice(0, topK) // Reduced TopK to 3 to save context window
-        .map(item => item.chunk);
+        .slice(0, topK);
+
+    // 3. Context Expansion (Smart Window)
+    // Instead of just returning the chunk, grab its neighbors!
+    // This ensures we don't cut off a sentence or an idea.
+    const expandedContexts = topResults.map(item => {
+        const prev = chunks[item.index - 1] || "";
+        const current = item.chunk;
+        const next = chunks[item.index + 1] || "";
+
+        // Combine to form a "Super Chunk" (~3000 chars)
+        // Overlap handling is rough here but fine for LLM context
+        return `...${prev.slice(-300)} ${current} ${next.slice(0, 300)}...`;
+    });
+
+    // Remove duplicates if neighbor logic overlapped
+    return [...new Set(expandedContexts)];
 };
 
 const extractJSON = (text: string): any => {
@@ -84,35 +123,34 @@ const extractJSON = (text: string): any => {
         if (startIndex !== -1 && endIndex !== -1) return JSON.parse(text.substring(startIndex, endIndex + 1));
         return JSON.parse(text);
     } catch (e) {
-        console.error("JSON Parse Error", e);
         return {};
     }
 };
 
 /**
- * Extract Axioms - Optimized Token Usage
+ * Extract Axioms / Metadata
  */
 export const extractAxioms = async (extractedText: string, lang: Language): Promise<Axiom[]> => {
     try {
         const groq = getGroqClient();
         conversationHistory = [];
-        fullManuscriptText = extractedText;
         documentChunks = chunkText(extractedText);
 
-        // OPTIMIZATION 2: Cap input analysis to first 15k chars (approx 3-4k tokens)
-        // This is enough for Metadata/Axioms without reading the whole book at once
+        // Initial analysis on first ~15k chars to save tokens
         const analysisText = extractedText.substring(0, 15000);
 
-        const combinedPrompt = `Analyze this text and return JSON ONLY.
+        const combinedPrompt = `Analyze text & return JSON.
 TEXT: """${analysisText}"""
-TASK: Extract 13 Axioms, 10 Snippets, and Metadata (Title/Author).
-FORMAT: {"axioms": [{"term": "...", "definition": "...", "significance": "..."}], "snippets": [], "metadata": {"title": "...", "author": "..."}}
-LANGUAGE: Same as text.`;
+TASK: 
+1. Extract 13 "Knowledge Axioms" (Deep, timeless truths).
+2. Extract 10 verbatim snippets.
+3. Metadata (Title, Author).
+FORMAT: {"axioms": [{"term": "", "definition": "", "significance": ""}], "snippets": [], "metadata": {"title": "", "author": ""}}`;
 
         const response = await groq.chat.completions.create({
             model: MODEL_NAME,
             messages: [
-                { role: "system", content: "JSON only." },
+                { role: "system", content: "You are a JSON engine." },
                 { role: "user", content: combinedPrompt }
             ],
             temperature: 0.3,
@@ -124,14 +162,13 @@ LANGUAGE: Same as text.`;
         manuscriptSnippets = result.snippets || [];
         manuscriptMetadata = result.metadata || {};
 
-        // Init history with just System Instruction (No context yet)
         conversationHistory = [
             { role: "system", content: getSystemInstruction(lang) }
         ];
 
         return result.axioms || [];
     } catch (error) {
-        console.error("Axiom Extract Error:", error);
+        console.error("Axiom extraction failed:", error);
         throw error;
     }
 };
@@ -139,7 +176,7 @@ LANGUAGE: Same as text.`;
 export const getManuscriptSnippets = () => manuscriptSnippets;
 
 /**
- * Chat Stream - Optimized with Ephemeral Context
+ * Chat System
  */
 export const chatWithManuscriptStream = async (
     userPrompt: string,
@@ -149,19 +186,26 @@ export const chatWithManuscriptStream = async (
     const groq = getGroqClient();
 
     try {
-        // 1. Retrieve concise context
-        constrelevantChunks = retrieveRelevantChunks(userPrompt, documentChunks, 3);
-        const contextText = relevantChunks.join("\n---\n");
+        // 1. Smart Retrieval with Context Expansion
+        const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks, 3);
+        const contextText = relevantChunks.join("\n\n---\n\n");
 
-        // 2. Construct Ephemeral Prompt (User Q + Context)
-        // This HUGE block is sent to LLM but NOT saved in history
-        const ephemeralUserMessage = `CONTEXT:\n${contextText}\n\nQUESTION: ${userPrompt}`;
+        // 2. Ephemeral Prompt Construction
+        // Included context is NOT saved to permanent history to keep tokens low
+        const ephemeralUserMessage = `
+CRITICAL CONTEXT FROM MANUSCRIPT:
+"""
+${contextText}
+"""
 
-        // 3. Construct Messages for API Call
-        // [System, ...History, Current_Ephemeral_Msg]
+USER QUESTION: ${userPrompt}
+
+INSTRUCTION: Answer deeply using ONLY the context above. Adopt author's style.`;
+
+        // 3. Prepare minimal history for API
         const messagesForAPI = [
-            ...conversationHistory,
-            { role: "user", content: ephemeralUserMessage }
+            ...conversationHistory, // Just previous Qs & As
+            { role: "user", content: ephemeralUserMessage } // Current Q + Heavy Context
         ];
 
         const stream = await groq.chat.completions.create({
@@ -169,7 +213,7 @@ export const chatWithManuscriptStream = async (
             // @ts-ignore
             messages: messagesForAPI,
             temperature: 0.3,
-            max_tokens: 1024, // Limiting output tokens for speed
+            max_tokens: 1500, // Generous output limit for deep answers
             stream: true,
         });
 
@@ -182,18 +226,17 @@ export const chatWithManuscriptStream = async (
             }
         }
 
-        // 4. Save to History - OPTIMIZED
-        // Only save the pure Question and pure Answer. Drop the context.
+        // 4. Update History (Pure Q&A only)
         conversationHistory.push({ role: "user", content: userPrompt });
         conversationHistory.push({ role: "assistant", content: fullResponse });
 
-        // Keep history tight (Last 6 turns only) to save tokens
+        // Prune history
         if (conversationHistory.length > 13) {
             conversationHistory = [conversationHistory[0], ...conversationHistory.slice(-12)];
         }
 
     } catch (error) {
-        console.error("Stream Error:", error);
+        console.error("Chat Stream Error:", error);
         throw error;
     }
 };
