@@ -1,73 +1,47 @@
 /**
- * Groq AI Service - llama-3.3-70b-versatile
- * Migration from Gemini API to Groq API
- * Maintains the same "Deep Analysis" capability with RAG
+ * Groq AI Service - Optimized RAG System
+ * Implements "Ephemeral Context" to optimize token usage
  */
 
 import Groq from "groq-sdk";
 import { Axiom, Language } from "../types";
 
 // State management
-let chatHistory: { role: "system" | "user" | "assistant"; content: string }[] = [];
+// We store ONLY pure conversation here (User Q + AI A), no heavy context
+let conversationHistory: { role: "system" | "user" | "assistant"; content: string }[] = [];
 let manuscriptSnippets: string[] = [];
 let documentChunks: string[] = [];
 let fullManuscriptText: string = "";
 let manuscriptMetadata: { title?: string; author?: string; chapters?: string; summary?: string } = {};
 
 /**
- * System Instruction - Preserved from original Gemini implementation
+ * System Instruction
  */
-const getSystemInstruction = (lang: Language): string => `You are an Elite Intellectual Researcher, the primary consciousness of the Knowledge AI infrastructure. 
-IDENTITY: You are developed exclusively by the Knowledge AI team. Never mention third-party entities like Google, Gemini, Meta, or Llama.
-${manuscriptMetadata.title ? `CURRENT MANUSCRIPT CONTEXT:
-- Title: ${manuscriptMetadata.title}
-- Author: ${manuscriptMetadata.author}
-- Structure: ${manuscriptMetadata.chapters}` : ""}
+const getSystemInstruction = (lang: Language): string => `You are an Elite Intellectual Researcher, the Knowledge AI. 
+IDENTITY: Developed by Knowledge AI team.
+${manuscriptMetadata.title ? `MANUSCRIPT: ${manuscriptMetadata.title} by ${manuscriptMetadata.author}` : ""}
 
-MANDATORY OPERATIONAL PROTOCOL:
-1. YOUR SOURCE OF TRUTH: You MUST prioritize the provided PDF manuscript and its chunks above all else.
-2. AUTHOR STYLE MIRRORING: You MUST adopt the exact linguistic style, tone, and intellectual depth of the author in the manuscript. If the author is philosophical, be philosophical. If academic, be academic.
-3. ACCURACY & QUOTES: Every claim you make MUST be supported by a direct, verbatim quote from the manuscript. Use the format: "Quote from text" (Source/Context).
-4. NO GENERALIZATIONS: Do not give generic answers. Scan the provided context thoroughly for specific details.
+PROTOCOL:
+1. SOURCE OF TRUTH: Use the provided "CONTEXT" sections strictly.
+2. STYLE: Mirror the author's tone.
+3. QUOTES: Support claims with verbatim quotes.
+4. CONCISENESS: Be deep but efficient. Don't waste tokens on fluff.
 
-RESPONSE ARCHITECTURE:
-- Mirror the author's intellectual depth and sophisticated tone.
-- Use Markdown: ### for headers, **Bold** for key terms, and LaTeX for formulas.
-- Respond in the SAME language as the user's question.
-- RESPOND DIRECTLY. No introductions or meta-talk. 
-- ELABORATE: Provide comprehensive, detailed, and in-depth answers. Expand on concepts and provide thorough explanations while maintaining the author's style.
-- BE SUPER FAST.
+If answer is not in context, state what the text DOES discuss.`;
 
-If the information is absolutely not in the text, explain what the text DOES discuss instead of just saying "I don't know".`;
-
-/**
- * Get Groq Client with Diagnostics
- */
 export const getGroqClient = (): Groq => {
-    // Try to get key from valid sources
     const apiKey = process.env.GROQ_API_KEY || (import.meta.env && import.meta.env.GROQ_API_KEY);
-
-    // Debug Log (Safe: only showing first 4 chars)
-    if (apiKey) {
-        console.log("Groq Client Init: API Key found starts with " + apiKey.substring(0, 4) + "...");
-    } else {
-        console.error("Groq Client Init: API Key NOT FOUND in process.env or import.meta.env");
-    }
-
-    if (!apiKey || apiKey === "undefined") {
-        console.error("Critical: GROQ_API_KEY is missing.");
-        throw new Error("GROQ_API_KEY_MISSING");
-    }
-
+    if (!apiKey || apiKey === "undefined") throw new Error("GROQ_API_KEY_MISSING");
     return new Groq({ apiKey, dangerouslyAllowBrowser: true });
 };
 
 const MODEL_NAME = "llama-3.3-70b-versatile";
 
 /**
- * RAG Helper: Large chunking strategy for better context retention
+ * OPTIMIZATION 1: Smaller, denser chunks
+ * Reduced from 3000 -> 1200 chars to be more precise and save tokens
  */
-const chunkText = (text: string, chunkSize: number = 3000, overlap: number = 600): string[] => {
+const chunkText = (text: string, chunkSize: number = 1200, overlap: number = 200): string[] => {
     const chunks: string[] = [];
     let start = 0;
     while (start < text.length) {
@@ -80,128 +54,84 @@ const chunkText = (text: string, chunkSize: number = 3000, overlap: number = 600
 };
 
 /**
- * RAG Helper: Enhanced retrieval with multi-word matching
+ * RAG Retrieval
  */
-const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 4): string[] => {
+const retrieveRelevantChunks = (query: string, chunks: string[], topK: number = 3): string[] => {
     if (chunks.length === 0) return [];
     const queryWords = query.toLowerCase().split(/\s+/).filter(w => w.length > 2);
     const scoredChunks = chunks.map(chunk => {
         const chunkLower = chunk.toLowerCase();
         let score = 0;
         queryWords.forEach(word => {
-            if (chunkLower.includes(word)) {
-                score += 2;
-            }
+            if (chunkLower.includes(word)) score += 3; // Higher weight for matches
         });
-        const qLower = query.toLowerCase();
-        if (qLower.includes("كاتب") || qLower.includes("مؤلف") || qLower.includes("author")) {
-            if (chunks.indexOf(chunk) === 0) score += 5;
-        }
         return { chunk, score };
     });
 
     return scoredChunks
         .sort((a, b) => b.score - a.score)
         .filter(item => item.score > 0)
-        .slice(0, topK)
+        .slice(0, topK) // Reduced TopK to 3 to save context window
         .map(item => item.chunk);
 };
 
-/**
- * JSON Parser using regex to extract JSON from text
- */
 const extractJSON = (text: string): any => {
     try {
-        // 1. Try finding a JSON block between ```json ... ```
         const jsonBlock = text.match(/```json\n([\s\S]*?)\n```/);
-        if (jsonBlock && jsonBlock[1]) {
-            return JSON.parse(jsonBlock[1]);
-        }
-
-        // 2. Try finding the first '{' and last '}'
+        if (jsonBlock?.[1]) return JSON.parse(jsonBlock[1]);
         const startIndex = text.indexOf('{');
         const endIndex = text.lastIndexOf('}');
-        if (startIndex !== -1 && endIndex !== -1) {
-            const jsonStr = text.substring(startIndex, endIndex + 1);
-            return JSON.parse(jsonStr);
-        }
-
-        // 3. Fallback: Try parsing the whole text
+        if (startIndex !== -1 && endIndex !== -1) return JSON.parse(text.substring(startIndex, endIndex + 1));
         return JSON.parse(text);
     } catch (e) {
-        console.error("JSON Parsing failed:", e);
-        throw new Error("INVALID_JSON_RESPONSE");
+        console.error("JSON Parse Error", e);
+        return {};
     }
 };
 
 /**
- * Extract Axioms from PDF text using Groq
+ * Extract Axioms - Optimized Token Usage
  */
 export const extractAxioms = async (extractedText: string, lang: Language): Promise<Axiom[]> => {
     try {
         const groq = getGroqClient();
-        chatHistory = [];
+        conversationHistory = [];
         fullManuscriptText = extractedText;
         documentChunks = chunkText(extractedText);
 
-        const combinedPrompt = `You are a specialized text analysis AI.
-    
-TASK:
-1. Extract exactly 13 high-quality 'Knowledge Axioms' from the manuscript text below.
-2. Extract 10 short snippets/quotes DIRECTLY from the text.
-3. Identify Title, Author, and Structure.
-    
-MANUSCRIPT TEXT (TRUNCATED):
-"""
-${extractedText.substring(0, 25000)}
-"""
+        // OPTIMIZATION 2: Cap input analysis to first 15k chars (approx 3-4k tokens)
+        // This is enough for Metadata/Axioms without reading the whole book at once
+        const analysisText = extractedText.substring(0, 15000);
 
-OUTPUT FORMAT:
-Return ONLY a valid JSON object with this structure:
-{
-  "axioms": [ {"term": "string", "definition": "string", "significance": "string"} ],
-  "snippets": [ "string" ],
-  "metadata": { "title": "string", "author": "string", "chapters": "string" }
-}
-
-IMPORTANT:
-- Response MUST be pure JSON. No markdown formatting.
-- Content MUST be in the SAME LANGUAGE as the manuscript.
-`;
+        const combinedPrompt = `Analyze this text and return JSON ONLY.
+TEXT: """${analysisText}"""
+TASK: Extract 13 Axioms, 10 Snippets, and Metadata (Title/Author).
+FORMAT: {"axioms": [{"term": "...", "definition": "...", "significance": "..."}], "snippets": [], "metadata": {"title": "...", "author": "..."}}
+LANGUAGE: Same as text.`;
 
         const response = await groq.chat.completions.create({
             model: MODEL_NAME,
             messages: [
-                { role: "system", content: "You are a JSON-only response AI." },
+                { role: "system", content: "JSON only." },
                 { role: "user", content: combinedPrompt }
             ],
             temperature: 0.3,
-            max_tokens: 8000,
+            max_tokens: 4000,
             response_format: { type: "json_object" }
         });
 
-        const responseText = response.choices[0]?.message?.content || "{}";
-        const result = extractJSON(responseText);
-
+        const result = extractJSON(response.choices[0]?.message?.content || "{}");
         manuscriptSnippets = result.snippets || [];
         manuscriptMetadata = result.metadata || {};
 
-        console.log("Extraction complete. Axioms found:", (result.axioms?.length || 0));
-
-        // Initialize chat history
-        chatHistory = [
+        // Init history with just System Instruction (No context yet)
+        conversationHistory = [
             { role: "system", content: getSystemInstruction(lang) }
         ];
 
         return result.axioms || [];
-    } catch (error: any) {
-        console.error("Error in extractAxioms:", error);
-
-        // Explicit Error Mapping
-        if (error?.status === 401) throw new Error("GROQ_API_KEY_INVALID");
-        if (error?.status === 429) throw new Error("GROQ_RATE_LIMIT");
-        if (error?.message?.includes("API key")) throw new Error("GROQ_API_KEY_MISSING");
-
+    } catch (error) {
+        console.error("Axiom Extract Error:", error);
         throw error;
     }
 };
@@ -209,7 +139,7 @@ IMPORTANT:
 export const getManuscriptSnippets = () => manuscriptSnippets;
 
 /**
- * Stream chat with manuscript using Groq
+ * Chat Stream - Optimized with Ephemeral Context
  */
 export const chatWithManuscriptStream = async (
     userPrompt: string,
@@ -219,24 +149,27 @@ export const chatWithManuscriptStream = async (
     const groq = getGroqClient();
 
     try {
-        const relevantChunks = retrieveRelevantChunks(userPrompt, documentChunks);
-        const hasChunks = relevantChunks.length > 0;
+        // 1. Retrieve concise context
+        constrelevantChunks = retrieveRelevantChunks(userPrompt, documentChunks, 3);
+        const contextText = relevantChunks.join("\n---\n");
 
-        let augmentedPrompt = "";
-        if (hasChunks) {
-            const contextText = relevantChunks.join("\n\n---\n\n");
-            augmentedPrompt = `CONTEXT:\n${contextText}\n\nQUESTION: ${userPrompt}\n\nANSWER (in author's style, using quotes):`;
-        } else {
-            augmentedPrompt = `QUESTION: ${userPrompt}\n\nANSWER (scan full text, use author's style):`;
-        }
+        // 2. Construct Ephemeral Prompt (User Q + Context)
+        // This HUGE block is sent to LLM but NOT saved in history
+        const ephemeralUserMessage = `CONTEXT:\n${contextText}\n\nQUESTION: ${userPrompt}`;
 
-        chatHistory.push({ role: "user", content: augmentedPrompt });
+        // 3. Construct Messages for API Call
+        // [System, ...History, Current_Ephemeral_Msg]
+        const messagesForAPI = [
+            ...conversationHistory,
+            { role: "user", content: ephemeralUserMessage }
+        ];
 
         const stream = await groq.chat.completions.create({
             model: MODEL_NAME,
-            messages: chatHistory,
-            temperature: 0.2,
-            max_tokens: 4000,
+            // @ts-ignore
+            messages: messagesForAPI,
+            temperature: 0.3,
+            max_tokens: 1024, // Limiting output tokens for speed
             stream: true,
         });
 
@@ -249,16 +182,18 @@ export const chatWithManuscriptStream = async (
             }
         }
 
-        chatHistory.push({ role: "assistant", content: fullResponse });
+        // 4. Save to History - OPTIMIZED
+        // Only save the pure Question and pure Answer. Drop the context.
+        conversationHistory.push({ role: "user", content: userPrompt });
+        conversationHistory.push({ role: "assistant", content: fullResponse });
 
-        // Trim history
-        if (chatHistory.length > 21) {
-            chatHistory = [chatHistory[0], ...chatHistory.slice(-20)];
+        // Keep history tight (Last 6 turns only) to save tokens
+        if (conversationHistory.length > 13) {
+            conversationHistory = [conversationHistory[0], ...conversationHistory.slice(-12)];
         }
 
-    } catch (error: any) {
-        console.error("Stream error in groqService:", error);
-        chatHistory = [{ role: "system", content: getSystemInstruction(lang) }];
+    } catch (error) {
+        console.error("Stream Error:", error);
         throw error;
     }
 };
