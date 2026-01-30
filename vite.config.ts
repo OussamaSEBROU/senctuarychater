@@ -26,6 +26,7 @@ export default defineConfig(({ mode }) => {
                     manualChunks: {
                         'groq': ['groq-sdk'],
                         'pdf': ['pdfjs-dist'],
+                        'ocr': ['tesseract.js'],
                         'react-vendor': ['react', 'react-dom'],
                         'markdown': ['react-markdown', 'react-syntax-highlighter']
                     }
@@ -33,7 +34,7 @@ export default defineConfig(({ mode }) => {
             }
         },
         optimizeDeps: {
-            include: ['groq-sdk', 'pdfjs-dist']
+            include: ['groq-sdk', 'pdfjs-dist', 'tesseract.js']
         },
         server: {
             port: 3000,
