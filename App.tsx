@@ -164,14 +164,28 @@ const App: React.FC = () => {
             }
         } catch (err: any) {
             console.error("Synthesis error:", err);
-            let errorMsg = currentLang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis failed.";
-            if (err.message === "EMPTY_TEXT") {
-                errorMsg = currentLang === 'ar' ? "لم يتم استخراج نص من المخطوط." : "No text could be extracted from the PDF.";
+
+            // Default Error
+            let errorMsg = currentLang === 'ar' ? "فشل التحليل العصبي للمخطوط." : "Synthesis Failed (Check Console)";
+
+            // Specific API Errors
+            if (err.message === "GROQ_API_KEY_INVALID") {
+                errorMsg = currentLang === 'ar' ? "مفتاح API غير صالح (خطأ 401)" : "Invalid API Key (Error 401). Check Dashboard.";
             } else if (err.message === "GROQ_API_KEY_MISSING") {
-                errorMsg = currentLang === 'ar' ? "مفتاح API غير موجود." : "API key is missing.";
+                errorMsg = currentLang === 'ar' ? "مفتاح API مفقود." : "API Key Missing on Render.";
+            } else if (err.message === "GROQ_RATE_LIMIT") {
+                errorMsg = currentLang === 'ar' ? "تجاوزت حد الطلبات (Rate Limit)." : "Rate Limit Exceeded (Error 429).";
+            } else if (err.message === "EMPTY_TEXT") {
+                errorMsg = currentLang === 'ar' ? "لا يمكن قراءة نص المخطوط (تأكد الملف نص وليس صورة)" : "Cannot extract text from PDF (Is it scanned?)";
+            } else if (err.message && err.message.includes("PDF_READ_FAILED")) {
+                errorMsg = "PDF Reading Failed. Please refresh/check file.";
+            } else if (err.message.includes("403")) {
+                errorMsg = "API Access Forbidden (403). Check Country/IP restriction.";
             }
+
             setError(errorMsg);
-            setPdf(null);
+            // Don't reset PDF so user can retry
+            // setPdf(null); 
         } finally {
             setIsSynthesizing(false);
         }
@@ -274,7 +288,7 @@ const App: React.FC = () => {
             </header>
 
             <main className="flex-1 overflow-hidden relative z-10 flex flex-col">
-                {!pdf ? (
+                {!pdf || error ? (
                     <div className="flex-1 overflow-y-auto flex flex-col items-center justify-center p-6 text-center touch-auto" dir="ltr">
                         <h2 className="text-6xl md:text-9xl font-black mb-4 select-none text-white tracking-tighter uppercase font-sans">
                             {translations.en.sanctuary}
@@ -294,10 +308,16 @@ const App: React.FC = () => {
                             </div>
                         </label>
                         {error && (
-                            <div className="mt-8 max-w-md mx-auto">
+                            <div className="mt-8 max-w-md mx-auto animate-in fade-in slide-in-from-bottom-5">
                                 <p className="text-red-500 text-[10px] font-black uppercase tracking-[0.3em] bg-red-500/10 px-6 py-2 rounded-full border border-red-500/20 shadow-lg">
                                     {error}
                                 </p>
+                                <button
+                                    onClick={() => { setError(null); setPdf(null); }}
+                                    className="mt-4 text-xs text-white/40 hover:text-white underline"
+                                >
+                                    Try Again
+                                </button>
                             </div>
                         )}
                     </div>
