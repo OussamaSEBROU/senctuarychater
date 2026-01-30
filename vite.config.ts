@@ -32,6 +32,11 @@ export default defineConfig(({ mode }) => {
         server: {
             port: 3000,
             host: true
+        },
+        preview: {
+            port: process.env.PORT ? parseInt(process.env.PORT) : 4173,
+            host: true,
+            allowedHosts: 'all'
         }
     };
 });
