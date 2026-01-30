@@ -68,7 +68,7 @@ export const getGroqClient = (): Groq => {
     return new Groq({ apiKey, dangerouslyAllowBrowser: true });
 };
 
-const MODEL_NAME = "moonshotai/kimi-k2-instruct-0905";
+const MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct";
 
 /**
  * 1. Strategic Chunking (1800 chars / 250 overlap)
@@ -273,4 +273,5 @@ INSTRUCTION: You MUST answer based on the provided context. Adopt the author's s
         throw error;
     }
 };
+
 
