@@ -32,7 +32,7 @@ export default defineConfig(({ mode }) => {
             }
         },
         optimizeDeps: {
-            include: ['groq-sdk', 'pdfjs-dist', 'tesseract.js']
+            include: ['groq-sdk', 'pdfjs-dist']
         },
         server: {
             port: 3000,
