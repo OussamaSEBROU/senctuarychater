@@ -1,0 +1,15 @@
+# Render.com Blueprint
+# Deploy: https://render.com/docs/blueprint-spec
+
+services:
+  - type: web
+    name: knowledge-ai-sanctuary
+    env: node
+    buildCommand: npm install && npm run build
+    startCommand: npm run preview -- --port $PORT --host
+    envVars:
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NODE_ENV
+        value: production
+    healthCheckPath: /
