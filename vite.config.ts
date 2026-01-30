@@ -6,7 +6,6 @@ export default defineConfig(({ mode }) => {
     const env = loadEnv(mode, process.cwd(), '');
 
     // Get API Key from System Environment (Render) OR .env file
-    // Priority: System Env > .env file
     const groqKey = process.env.GROQ_API_KEY || env.GROQ_API_KEY;
 
     console.log(`Build config: GROQ_API_KEY is ${groqKey ? 'PRESENT' : 'MISSING'}`);
@@ -14,7 +13,6 @@ export default defineConfig(({ mode }) => {
     return {
         plugins: [react()],
         define: {
-            // Force inject the variable into the browser code
             'process.env.GROQ_API_KEY': JSON.stringify(groqKey),
             'import.meta.env.GROQ_API_KEY': JSON.stringify(groqKey)
         },
@@ -26,7 +24,7 @@ export default defineConfig(({ mode }) => {
                     manualChunks: {
                         'groq': ['groq-sdk'],
                         'pdf': ['pdfjs-dist'],
-                        'ocr': ['tesseract.js'],
+                        // Removed tesseract.js from here to avoid build errors "Could not resolve entry module"
                         'react-vendor': ['react', 'react-dom'],
                         'markdown': ['react-markdown', 'react-syntax-highlighter']
                     }
