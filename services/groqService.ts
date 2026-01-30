@@ -68,7 +68,7 @@ export const getGroqClient = (): Groq => {
     return new Groq({ apiKey, dangerouslyAllowBrowser: true });
 };
 
-const MODEL_NAME = "meta-llama/llama-4-maverick-17b-128e-instruct";
+const MODEL_NAME = "meta-llama/llama-4-scout-17b-16e-instruct";
 
 /**
  * 1. Strategic Chunking (1800 chars / 250 overlap)
