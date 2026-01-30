@@ -1,15 +1,16 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { Axiom, PDFData, Language } from './types';
-import { extractAxioms } from './services/groqService';
+import { extractAxioms, resetGenAISession } from './services/groqService';
 import { extractPDFContent } from './services/ocrService';
 import AxiomCard from './components/AxiomCard';
 import ChatInterface from './components/ChatInterface';
 import Sidebar from './components/Sidebar';
 import ManuscriptViewer from './components/ManuscriptViewer';
 import { translations } from './translations';
+import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 
-// مصفوفة المقولات المختارة بعناية من المصادر المحددة
+// مصفوفة المقولات
 const quotes = {
     en: [
         "The present is theirs; the future, for which I really worked, is mine. — Nikola Tesla",
@@ -74,27 +75,27 @@ const quotes = {
     ]
 };
 
-// نصوص الحالة التقنية
+// نصوص الحالة التقنية - محّدثة لدعم الـ OCR
 const statusMessages = {
     en: [
-        "Extracting text from PDF...",
-        "Analyzing manuscript structure...",
-        "Deep thinking in progress...",
+        "Resetting Neural Memory...",
+        "Scanning document structure...",
+        "Detecting text vs image...",
+        "Applying Neural OCR (Deep Scan)...",
+        "Processing linguistic patterns...",
         "Extracting axiomatic wisdom...",
         "Synthesizing neural connections...",
-        "Mapping intellectual framework...",
-        "Decoding author's logic...",
-        "Finalizing neural sync..."
+        "Finalizing analysis..."
     ],
     ar: [
-        "استخراج النص من المخطوط...",
-        "يتم تحليل بنية المخطوط...",
-        "تفكير معمق في الأفكار المركزية...",
+        "تصفير الذاكرة العصبية...",
+        "مسح بنية الملف...",
+        "الكشف عن نوع المحتوى (نص/صورة)...",
+        "تشغيل الماسح العصبي (OCR)...",
+        "معالجة الأنماط اللغوية...",
         "استخراج الحكمة الأكسيومية...",
         "توليف الروابط العصبية...",
-        "رسم الإطار الفكري...",
-        "فك شفرة منطق المؤلف...",
-        "إتمام المزامنة العصبية..."
+        "إتمام التحليل النهائي..."
     ]
 };
 
@@ -123,7 +124,7 @@ const App: React.FC = () => {
             interval = setInterval(() => {
                 setCurrentQuoteIndex(Math.floor(Math.random() * quotes[lang].length));
                 setCurrentStatusIndex(prev => (prev + 1) % statusMessages[lang].length);
-            }, 5000);
+            }, 4000);
         }
         return () => clearInterval(interval);
     }, [isSynthesizing, lang]);
@@ -141,7 +142,10 @@ const App: React.FC = () => {
         setFlowStep('axioms');
 
         try {
-            // Step 1: Extract text from PDF using OCR service
+            // Step 0: Clear previous session memory completely
+            resetGenAISession();
+
+            // Step 1: Extract text (OCR handled internally)
             console.log("Starting PDF text extraction...");
             const extractedText = await extractPDFContent(base64, (status, progress) => {
                 console.log(`OCR Progress: ${status} - ${Math.round(progress * 100)}%`);
@@ -153,7 +157,7 @@ const App: React.FC = () => {
 
             console.log(`Extracted ${extractedText.length} characters from PDF`);
 
-            // Step 2: Extract axioms using Groq
+            // Step 2: Extract axioms via Groq
             console.log("Starting axiom extraction with Groq...");
             const extracted = await extractAxioms(extractedText, currentLang);
 
@@ -170,22 +174,18 @@ const App: React.FC = () => {
 
             // Specific API Errors
             if (err.message === "GROQ_API_KEY_INVALID") {
-                errorMsg = currentLang === 'ar' ? "مفتاح API غير صالح (خطأ 401)" : "Invalid API Key (Error 401). Check Dashboard.";
+                errorMsg = currentLang === 'ar' ? "مفتاح API غير صالح." : "Invalid API Key.";
             } else if (err.message === "GROQ_API_KEY_MISSING") {
-                errorMsg = currentLang === 'ar' ? "مفتاح API مفقود." : "API Key Missing on Render.";
+                errorMsg = currentLang === 'ar' ? "مفتاح API مفقود." : "API Key Missing.";
             } else if (err.message === "GROQ_RATE_LIMIT") {
-                errorMsg = currentLang === 'ar' ? "تجاوزت حد الطلبات (Rate Limit)." : "Rate Limit Exceeded (Error 429).";
+                errorMsg = currentLang === 'ar' ? "تجاوزت حد الطلبات." : "Rate Limit Exceeded.";
             } else if (err.message === "EMPTY_TEXT") {
-                errorMsg = currentLang === 'ar' ? "لا يمكن قراءة نص المخطوط (تأكد الملف نص وليس صورة)" : "Cannot extract text from PDF (Is it scanned?)";
+                errorMsg = currentLang === 'ar' ? "النص غير مقروء. تأكد من جودة الصورة." : "Unreadable text. Check scan quality.";
             } else if (err.message && err.message.includes("PDF_READ_FAILED")) {
-                errorMsg = "PDF Reading Failed. Please refresh/check file.";
-            } else if (err.message.includes("403")) {
-                errorMsg = "API Access Forbidden (403). Check Country/IP restriction.";
+                errorMsg = "PDF Reading Failed.";
             }
 
             setError(errorMsg);
-            // Don't reset PDF so user can retry
-            // setPdf(null); 
         } finally {
             setIsSynthesizing(false);
         }
@@ -196,6 +196,12 @@ const App: React.FC = () => {
         if (!file) return;
         if (file.type !== 'application/pdf') {
             setError(lang === 'ar' ? "يرجى رفع ملف PDF فقط." : "Please upload a PDF file only.");
+            return;
+        }
+
+        // Check file size limit
+        if (file.size > 20 * 1024 * 1024) {
+            setError(lang === 'ar' ? "حجم الملف كبير جداً (الحد الأقصى 20 ميجابايت)." : "File too large (Max 20MB).");
             return;
         }
 
@@ -215,6 +221,7 @@ const App: React.FC = () => {
         setFlowStep('axioms');
         setShowViewer(false);
         setError(null);
+        resetGenAISession(); // Also clear prompt instructions
     };
 
     return (
@@ -243,10 +250,9 @@ const App: React.FC = () => {
                 <div className="fixed inset-0 bg-black z-[100] flex flex-col items-center justify-center p-6 text-center animate-in fade-in duration-1000">
                     <div className="spinner-arc mb-16 w-24 h-24 border-t-orange-600"></div>
 
-                    {/* نص الحالة التقنية */}
                     <div className="mb-4 h-6">
                         <p className="text-orange-500/60 text-[10px] font-black tracking-[0.4em] uppercase animate-pulse">
-                            {statusMessages[lang][currentStatusIndex]}
+                            {statusMessages[lang][currentStatusIndex] || statusMessages[lang][0]}
                         </p>
                     </div>
 
